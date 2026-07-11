@@ -37,6 +37,7 @@ export interface Document {
   mime_type: string
   page_count: number | null
   status: DocumentStatus
+  extraction_progress: number
   error_message: string | null
   uploaded_by: string
   created_at: string

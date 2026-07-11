@@ -38,6 +38,17 @@ export function DocumentRow({ projectId, document }: { projectId: string; docume
           {document.page_count ? `${document.page_count} pages` : document.mime_type}
           {document.error_message ? ` · ${document.error_message}` : ""}
         </div>
+        {document.status === "processing" ? (
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="h-1 max-w-40 flex-1 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                style={{ width: `${document.extraction_progress}%` }}
+              />
+            </div>
+            <span className="text-[11px] font-semibold text-amber-600">{document.extraction_progress}%</span>
+          </div>
+        ) : null}
       </div>
       <StatusBadge status={document.status} />
       {document.status === "uploaded" || document.status === "failed" ? (

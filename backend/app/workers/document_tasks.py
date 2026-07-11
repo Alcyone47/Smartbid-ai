@@ -19,12 +19,19 @@ async def _process_document_async(document_id: str) -> None:
         document_repo = DocumentRepository(db)
         document = await document_repo.get_by_id_unscoped(uuid.UUID(document_id))
 
+        async def on_progress(done: int, total: int) -> None:
+            # Cap below 100 during batches; 100 is set only once the row is fully persisted.
+            pct = min(95, round(done / total * 95)) if total else 0
+            await document_repo.update_progress(document, pct)
+
         try:
             content = await download_document(settings.supabase_storage_bucket, document.storage_path)
             extraction_service = ExtractionService(llm_provider=get_llm_provider())
 
             if document.doc_type == "rfp":
-                outcome = await extraction_service.extract_requirements(content, document.mime_type)
+                outcome = await extraction_service.extract_requirements(
+                    content, document.mime_type, progress_callback=on_progress
+                )
                 requirement_repo = RequirementRepository(db)
                 requirements = [
                     ExtractedRequirement(
@@ -46,7 +53,9 @@ async def _process_document_async(document_id: str) -> None:
                 ]
                 await requirement_repo.bulk_create(requirements)
             elif document.doc_type == "vendor_proposal":
-                outcome = await extraction_service.extract_specifications(content, document.mime_type)
+                outcome = await extraction_service.extract_specifications(
+                    content, document.mime_type, progress_callback=on_progress
+                )
                 specification_repo = SpecificationRepository(db)
                 specifications = [
                     ExtractedSpecification(
@@ -69,7 +78,7 @@ async def _process_document_async(document_id: str) -> None:
                 raise UnsupportedDocumentTypeError(f"Unsupported doc_type for extraction: {document.doc_type}")
 
             await document_repo.update_page_count(document, outcome.page_count)
-            await document_repo.update_status(document, status="extracted")
+            await document_repo.update_status(document, status="extracted", progress=100)
         except Exception as exc:
             await document_repo.update_status(document, status="failed", error_message=str(exc))
             raise

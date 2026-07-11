@@ -86,6 +86,11 @@ def _batch_document(pages: list[str], max_chars: int) -> list[str]:
     return [_build_paginated_text(batch) for batch in batches] or [""]
 
 
+async def _report_progress(callback: ProgressCallback | None, completed: int, total: int) -> None:
+    if callback is not None:
+        await callback(completed, total)
+
+
 @dataclass
 class RequirementExtractionOutcome:
     result: RequirementExtractionResult
@@ -118,13 +123,16 @@ class ExtractionService:
         cleaned_pages = self._text_cleaner.clean_pages(parsed.pages)
         return ParsedDocument(pages=cleaned_pages, page_count=parsed.page_count)
 
-    async def extract_requirements(self, content: bytes, mime_type: str) -> RequirementExtractionOutcome:
+    async def extract_requirements(
+        self, content: bytes, mime_type: str, progress_callback: ProgressCallback | None = None
+    ) -> RequirementExtractionOutcome:
         parsed = self._parse_and_clean(content, mime_type)
         batches = _batch_document(parsed.pages, settings.extraction_max_chars_per_batch)
 
         requirements: list = []
         raw_responses: list[dict] = []
-        for document_text in batches:
+        await _report_progress(progress_callback, 0, len(batches))
+        for index, document_text in enumerate(batches):
             llm_result = await self._llm_provider.extract_structured(
                 system_prompt=REQUIREMENT_SYSTEM_PROMPT,
                 document_text=document_text,
@@ -139,6 +147,7 @@ class ExtractionService:
                 ) from exc
             requirements.extend(batch_result.requirements)
             raw_responses.append(llm_result.raw_response)
+            await _report_progress(progress_callback, index + 1, len(batches))
 
         return RequirementExtractionOutcome(
             result=RequirementExtractionResult(requirements=requirements),
@@ -146,13 +155,16 @@ class ExtractionService:
             page_count=parsed.page_count,
         )
 
-    async def extract_specifications(self, content: bytes, mime_type: str) -> SpecificationExtractionOutcome:
+    async def extract_specifications(
+        self, content: bytes, mime_type: str, progress_callback: ProgressCallback | None = None
+    ) -> SpecificationExtractionOutcome:
         parsed = self._parse_and_clean(content, mime_type)
         batches = _batch_document(parsed.pages, settings.extraction_max_chars_per_batch)
 
         specifications: list = []
         raw_responses: list[dict] = []
-        for document_text in batches:
+        await _report_progress(progress_callback, 0, len(batches))
+        for index, document_text in enumerate(batches):
             llm_result = await self._llm_provider.extract_structured(
                 system_prompt=SPECIFICATION_SYSTEM_PROMPT,
                 document_text=document_text,
@@ -167,6 +179,7 @@ class ExtractionService:
                 ) from exc
             specifications.extend(batch_result.specifications)
             raw_responses.append(llm_result.raw_response)
+            await _report_progress(progress_callback, index + 1, len(batches))
 
         return SpecificationExtractionOutcome(
             result=SpecificationExtractionResult(specifications=specifications),

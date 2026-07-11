@@ -110,7 +110,13 @@ export function ProjectDetailsPage() {
             <div className="flex flex-col gap-3">
               <ProcessingStep
                 label="RFP requirements extracted"
-                meta={rfpDocument ? rfpDocument.status : "not started"}
+                meta={
+                  rfpDocument
+                    ? rfpDocument.status === "processing"
+                      ? `${rfpDocument.extraction_progress}%`
+                      : rfpDocument.status
+                    : "not started"
+                }
                 done={rfpExtracted}
                 available
               />

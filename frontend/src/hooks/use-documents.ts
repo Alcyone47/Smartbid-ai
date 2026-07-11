@@ -9,6 +9,10 @@ export function useDocuments(projectId: string) {
     queryKey: documentsKey(projectId),
     queryFn: () => documentsApi.list(projectId),
     enabled: !!projectId,
+    // Poll while any document is extracting so the progress bar advances live;
+    // stops automatically once everything is extracted/failed.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((doc) => doc.status === "processing") ? 2000 : false,
   })
 }
 
