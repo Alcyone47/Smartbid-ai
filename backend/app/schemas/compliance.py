@@ -24,3 +24,20 @@ class ComplianceMatrixEntryRead(BaseModel):
     match_score: Decimal | None
     rationale: str
     computed_at: datetime
+
+
+class VendorComplianceSummaryRead(BaseModel):
+    vendor_name: str
+    overall_compliance_pct: float
+    total_requirements: int
+    matched: int
+    partial: int
+    unmatched: int
+    mandatory_total: int
+    mandatory_met: int
+    mandatory_partial: int
+    mandatory_unmet: int
+    optional_total: int
+    optional_met: int
+    optional_partial: int
+    optional_unmet: int

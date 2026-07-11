@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import documents, projects
-from app.api.v1 import extraction, matching
+from app.api.v1 import extraction, matching, reports
 from app.config import settings
 from app.core.exceptions import AppException
 
@@ -38,6 +38,7 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(extraction.router, prefix="/api/v1")
 app.include_router(matching.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")
 
 
 @app.get("/health")

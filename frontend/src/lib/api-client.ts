@@ -57,3 +57,38 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   return data as T
 }
+
+function filenameFromDisposition(header: string | null): string | undefined {
+  if (!header) return undefined
+  const match = /filename="?([^"]+)"?/.exec(header)
+  return match?.[1]
+}
+
+/** Fetch an authenticated binary response and trigger a browser download. */
+export async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  const authHeader = await getAuthHeader()
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeader })
+
+  if (!response.ok) {
+    let message = "Download failed"
+    let errorCode = "UNKNOWN"
+    try {
+      const errorBody = (await response.json()) as ApiErrorBody
+      message = errorBody.message ?? message
+      errorCode = errorBody.error_code ?? errorCode
+    } catch {
+      // non-JSON error body; keep defaults
+    }
+    throw new ApiError(message, errorCode, response.status)
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filenameFromDisposition(response.headers.get("Content-Disposition")) ?? fallbackFilename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}

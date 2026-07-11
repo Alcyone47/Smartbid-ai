@@ -95,6 +95,23 @@ export interface ComplianceMatrixEntry {
   computed_at: string
 }
 
+export interface VendorComplianceSummary {
+  vendor_name: string
+  overall_compliance_pct: number
+  total_requirements: number
+  matched: number
+  partial: number
+  unmatched: number
+  mandatory_total: number
+  mandatory_met: number
+  mandatory_partial: number
+  mandatory_unmet: number
+  optional_total: number
+  optional_met: number
+  optional_partial: number
+  optional_unmet: number
+}
+
 export interface ApiErrorBody {
   success: false
   message: string

@@ -14,8 +14,8 @@ from app.repositories.compliance_repository import ComplianceRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.specification_repository import SpecificationRepository
-from app.schemas.compliance import ComplianceMatrixEntryRead
-from app.services.matching_service import match_requirements
+from app.schemas.compliance import ComplianceMatrixEntryRead, VendorComplianceSummaryRead
+from app.services.matching import ScoredEntry, compute_compliance_summary, match_requirements
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["matching"])
 
@@ -106,3 +106,28 @@ async def list_compliance_matrix(
     compliance_repo = ComplianceRepository(db)
     rows = await compliance_repo.list_by_project_with_details(project_id)
     return [_to_read_schema(row) for row in rows]
+
+
+@router.get("/compliance-summary", response_model=list[VendorComplianceSummaryRead])
+async def compliance_summary(
+    project_id: uuid.UUID,
+    vendor_document_id: uuid.UUID | None = None,
+    current_user: CurrentUser = Depends(get_current_org_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[VendorComplianceSummaryRead]:
+    """Deterministic per-vendor compliance rollup computed from the persisted match rows."""
+    await _get_org_project(project_id, current_user.org_id, db)
+    compliance_repo = ComplianceRepository(db)
+    rows = await compliance_repo.list_by_project_with_details(project_id, vendor_document_id)
+
+    scored = [
+        ScoredEntry(
+            vendor_name=vendor_name,
+            status=entry.status,
+            match_score=entry.match_score,
+            is_mandatory=requirement.is_mandatory,
+        )
+        for entry, requirement, _specification, vendor_name in rows
+    ]
+    summaries = compute_compliance_summary(scored)
+    return [VendorComplianceSummaryRead(**vars(summary)) for summary in summaries]

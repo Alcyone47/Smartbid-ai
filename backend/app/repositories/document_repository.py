@@ -28,9 +28,17 @@ class DocumentRepository:
             raise DocumentNotFoundError()
         return document
 
-    async def update_status(self, document: Document, status: str, error_message: str | None = None) -> None:
+    async def update_status(
+        self, document: Document, status: str, error_message: str | None = None, progress: int | None = None
+    ) -> None:
         document.status = status
         document.error_message = error_message
+        if progress is not None:
+            document.extraction_progress = progress
+        await self._db.commit()
+
+    async def update_progress(self, document: Document, progress: int) -> None:
+        document.extraction_progress = progress
         await self._db.commit()
 
     async def update_page_count(self, document: Document, page_count: int) -> None:

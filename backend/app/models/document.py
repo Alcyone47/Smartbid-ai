@@ -21,6 +21,7 @@ class Document(Base):
     mime_type: Mapped[str] = mapped_column(String, nullable=False)
     page_count: Mapped[int | None] = mapped_column()
     status: Mapped[str] = mapped_column(String, nullable=False, server_default="uploaded")
+    extraction_progress: Mapped[int] = mapped_column(nullable=False, server_default=text("0"))
     error_message: Mapped[str | None] = mapped_column(String)
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))

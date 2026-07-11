@@ -10,7 +10,7 @@ import { DocumentRow } from "@/components/document-row"
 import { RequirementsTab } from "@/components/requirements-tab"
 import { VendorsTab } from "@/components/vendors-tab"
 import { ComplianceMatrixTab } from "@/components/compliance-matrix-tab"
-import { ReportsPanelMock } from "@/components/reports-panel-mock"
+import { ReportsPanel } from "@/components/reports-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function ProjectDetailsPage() {
@@ -148,7 +148,7 @@ export function ProjectDetailsPage() {
           <ComplianceMatrixTab projectId={projectId} vendorDocuments={vendorDocuments} />
         </TabsContent>
         <TabsContent value="reports" className="mt-5">
-          <ReportsPanelMock />
+          <ReportsPanel projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>

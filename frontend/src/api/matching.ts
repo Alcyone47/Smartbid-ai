@@ -1,5 +1,5 @@
 import { apiRequest } from "@/lib/api-client"
-import type { ComplianceMatrixEntry } from "@/types/api"
+import type { ComplianceMatrixEntry, VendorComplianceSummary } from "@/types/api"
 
 export const matchingApi = {
   trigger: (projectId: string, documentId: string) =>
@@ -8,4 +8,6 @@ export const matchingApi = {
     }),
   list: (projectId: string) =>
     apiRequest<ComplianceMatrixEntry[]>(`/api/v1/projects/${projectId}/compliance-matrix`),
+  summary: (projectId: string) =>
+    apiRequest<VendorComplianceSummary[]>(`/api/v1/projects/${projectId}/compliance-summary`),
 }

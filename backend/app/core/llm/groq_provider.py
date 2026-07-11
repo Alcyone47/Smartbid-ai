@@ -40,6 +40,7 @@ class GroqProvider(LLMProvider):
                 ],
                 tools=[tool],
                 tool_choice={"type": "function", "function": {"name": schema_name}},
+                max_completion_tokens=settings.extraction_max_output_tokens,
             )
         except Exception as exc:
             raise LLMProviderError(f"Groq extraction call failed: {exc}") from exc

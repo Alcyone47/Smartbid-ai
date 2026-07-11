@@ -18,6 +18,7 @@ class DocumentRead(BaseModel):
     mime_type: str
     page_count: int | None
     status: str
+    extraction_progress: int
     error_message: str | None
     uploaded_by: uuid.UUID
     created_at: datetime

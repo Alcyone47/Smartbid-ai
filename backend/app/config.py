@@ -17,16 +17,26 @@ class Settings(BaseSettings):
     database_url: str
 
     anthropic_api_key: str | None = None
-    anthropic_extraction_model: str = "claude-sonnet-4-5"
+    anthropic_extraction_model: str = "claude-haiku-4-5"
 
     groq_api_key: str | None = None
     groq_model: str = "llama-3.3-70b-versatile"
+
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.1-flash-lite"
 
     voyage_api_key: str | None = None
     voyage_embedding_model: str = "voyage-3"
 
     redis_url: str = "redis://localhost:6379/0"
     llm_provider: str = "claude"
+
+    # Extraction is chunked so a single LLM call never exceeds the provider's
+    # context window / per-minute token budget. Budget is measured in characters of
+    # source text per call (~4 chars/token). Defaults keep a single Groq request
+    # (input + reserved output) under the free-tier 12k tokens-per-minute limit.
+    extraction_max_chars_per_batch: int = 24000
+    extraction_max_output_tokens: int = 4000
 
     @property
     def cors_origins(self) -> list[str]:
