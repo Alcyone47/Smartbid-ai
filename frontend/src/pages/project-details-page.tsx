@@ -3,12 +3,13 @@ import { Link, useParams } from "@tanstack/react-router"
 import { FileText, CheckCircle2, Circle } from "lucide-react"
 import { useProject } from "@/hooks/use-projects"
 import { useDocuments } from "@/hooks/use-documents"
+import { useComplianceMatrix } from "@/hooks/use-matching"
 import { StatusBadge } from "@/components/status-badge"
 import { DocumentUploadDialog } from "@/components/document-upload-dialog"
 import { DocumentRow } from "@/components/document-row"
 import { RequirementsTab } from "@/components/requirements-tab"
 import { VendorsTab } from "@/components/vendors-tab"
-import { ComplianceMatrixMock } from "@/components/compliance-matrix-mock"
+import { ComplianceMatrixTab } from "@/components/compliance-matrix-tab"
 import { ReportsPanelMock } from "@/components/reports-panel-mock"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -16,6 +17,7 @@ export function ProjectDetailsPage() {
   const { projectId } = useParams({ from: "/_app/projects/$projectId" })
   const { data: project, isLoading: isProjectLoading } = useProject(projectId)
   const { data: documents } = useDocuments(projectId)
+  const { data: complianceEntries } = useComplianceMatrix(projectId)
   const [tab, setTab] = useState("requirements")
 
   if (isProjectLoading || !project) {
@@ -118,8 +120,12 @@ export function ProjectDetailsPage() {
                 done={vendorsExtracted}
                 available
               />
-              <ProcessingStep label="Semantic matching" meta="not available" done={false} available={false} />
-              <ProcessingStep label="Compliance matrix build" meta="not available" done={false} available={false} />
+              <ProcessingStep
+                label="Requirement matching"
+                meta={complianceEntries && complianceEntries.length > 0 ? `${complianceEntries.length} entries` : "not run yet"}
+                done={!!complianceEntries && complianceEntries.length > 0}
+                available
+              />
             </div>
           </div>
         </div>
@@ -139,7 +145,7 @@ export function ProjectDetailsPage() {
           <VendorsTab projectId={projectId} vendorDocuments={vendorDocuments} />
         </TabsContent>
         <TabsContent value="compliance" className="mt-5">
-          <ComplianceMatrixMock />
+          <ComplianceMatrixTab projectId={projectId} vendorDocuments={vendorDocuments} />
         </TabsContent>
         <TabsContent value="reports" className="mt-5">
           <ReportsPanelMock />

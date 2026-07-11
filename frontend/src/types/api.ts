@@ -72,6 +72,29 @@ export interface ExtractedSpecification {
   created_at: string
 }
 
+export type ComplianceStatus = "match" | "partial" | "no_match"
+
+export interface ComplianceMatrixEntry {
+  id: string
+  project_id: string
+  requirement_id: string
+  vendor_document_id: string
+  matched_specification_id: string | null
+  vendor_name: string
+  requirement_label: string
+  requirement_text: string
+  expected_value: string | null
+  unit: string | null
+  operator: string | null
+  is_mandatory: boolean
+  vendor_value: string | null
+  source_page: number | null
+  status: ComplianceStatus
+  match_score: number | string | null
+  rationale: string
+  computed_at: string
+}
+
 export interface ApiErrorBody {
   success: false
   message: string

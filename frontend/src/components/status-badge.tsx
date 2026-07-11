@@ -14,6 +14,16 @@ const STATUS_STYLES: Record<string, string> = {
   processing: "bg-amber-50 text-amber-600",
   extracted: "bg-emerald-50 text-emerald-600",
   failed: "bg-red-50 text-red-600",
+  match: "bg-emerald-50 text-emerald-600",
+  partial: "bg-amber-50 text-amber-600",
+  no_match: "bg-red-50 text-red-600",
+}
+
+function formatLabel(status: string) {
+  return status
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
 }
 
 export function StatusBadge({ status }: { status: string }) {
@@ -26,7 +36,7 @@ export function StatusBadge({ status }: { status: string }) {
       )}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {status}
+      {formatLabel(status)}
     </span>
   )
 }
