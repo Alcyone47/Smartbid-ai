@@ -24,4 +24,27 @@ supabase/   SQL migrations mirrored for the Supabase CLI (optional; Alembic is s
    - Celery worker: `cd backend && uv run celery -A app.core.celery_app worker --loglevel=info`
    - Frontend: `cd frontend && npm install && npm run dev`
 
+## Docker
+
+The whole stack is containerized. Postgres and Storage are hosted on Supabase (cloud), so only Redis, the backend, the Celery worker, and the frontend run locally.
+
+Prerequisites: fill in `backend/.env` (see `.env.example`). The frontend's `VITE_*` build args come from the root `.env` (git-ignored).
+
+```
+docker compose up --build
+```
+
+Services:
+
+- **frontend** — Nginx serving the built Vite app at http://localhost:5173
+- **backend** — FastAPI (uvicorn) at http://localhost:8000 (`/health` for a liveness check)
+- **worker** — Celery worker sharing the backend image
+- **redis** — Celery broker/result backend
+
+Notes:
+
+- `REDIS_URL` is overridden to `redis://redis:6379/0` inside the Docker network.
+- The backend runs Alembic migrations on startup only if `ALEMBIC_DATABASE_URL` is set; otherwise it skips them. Run them manually with `docker compose run --rm backend alembic upgrade head`.
+- `VITE_*` values are baked into the frontend bundle at build time; change them and rebuild (`docker compose build frontend`) to take effect.
+
 See `AGENTS.md`-equivalent context in the plan doc for architecture details (data model, extraction pipeline, matching engine, phasing).

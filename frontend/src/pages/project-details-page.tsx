@@ -36,10 +36,6 @@ export function ProjectDetailsPage() {
       return next
     })
 
-  if (isProjectLoading || !project) {
-    return <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
-  }
-
   const rfpDocuments = (documents ?? []).filter((d) => d.doc_type === "rfp")
   const vendorDocuments = (documents ?? []).filter((d) => d.doc_type === "vendor_proposal")
   const rfpDocument = rfpDocuments[0]
@@ -63,6 +59,10 @@ export function ProjectDetailsPage() {
     }
     return order.map((key) => ({ key, ...byVendor.get(key)! }))
   }, [vendorDocuments])
+
+  if (isProjectLoading || !project) {
+    return <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
+  }
 
   return (
     <div>
