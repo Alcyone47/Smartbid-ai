@@ -23,7 +23,7 @@ _TEXT_FALLBACK_DISCOUNT = 0.9
 
 
 def candidate_score(
-    requirement: "ExtractedRequirement", spec: "ExtractedSpecification"
+    requirement: "RequirementParameter", spec: "ExtractedSpecification"
 ) -> float:
     """0-100 confidence that ``spec`` describes the same parameter as ``requirement``."""
     req_key = normalize_phrase(requirement.requirement_key)
@@ -49,7 +49,7 @@ def candidate_score(
 
 
 def best_candidate(
-    requirement: "ExtractedRequirement", specifications: list["ExtractedSpecification"]
+    requirement: "RequirementParameter", specifications: list["ExtractedSpecification"]
 ) -> tuple["ExtractedSpecification | None", float]:
     best_spec: "ExtractedSpecification | None" = None
     best_score = 0.0

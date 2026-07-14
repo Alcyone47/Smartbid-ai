@@ -18,12 +18,19 @@ from app.services.matching import config, matchers, param_types
 from app.services.matching.pairing import best_candidate, equipment_candidate_score
 
 if TYPE_CHECKING:
-    from app.models.extraction import ExtractedRequirement, ExtractedSpecification
+    from app.models.extraction import (
+        ExtractedSpecification,
+        Requirement,
+        RequirementParameter,
+    )
 
 
 @dataclass
 class MatchOutcome:
-    requirement: "ExtractedRequirement"
+    # ``requirement`` is a single parameter (with its Minimum Required
+    # Specification); its equipment_key/label/text alias attributes let the typed
+    # matchers read it unchanged.
+    requirement: "RequirementParameter"
     matched_specification: "ExtractedSpecification | None"
     status: str
     match_score: Decimal
@@ -31,7 +38,7 @@ class MatchOutcome:
 
 
 def evaluate_requirement(
-    requirement: "ExtractedRequirement", specifications: list["ExtractedSpecification"]
+    requirement: "RequirementParameter", specifications: list["ExtractedSpecification"]
 ) -> MatchOutcome:
     candidate, pairing_score = best_candidate(requirement, specifications)
 
@@ -55,7 +62,7 @@ def evaluate_requirement(
 
 
 def _compare(
-    requirement: "ExtractedRequirement", candidate: "ExtractedSpecification"
+    requirement: "RequirementParameter", candidate: "ExtractedSpecification"
 ) -> matchers.MatchResult:
     param_type = param_types.infer_type(requirement)
 
@@ -107,29 +114,51 @@ def _match_vendor_equipment(
     return best_specs
 
 
-def match_requirements(
-    requirements: list["ExtractedRequirement"], specifications: list["ExtractedSpecification"]
-) -> list[MatchOutcome]:
-    """Equipment-first matching: pair each RFP equipment group to a vendor equipment
-    group, then compare each requirement only against that equipment's specs. Falls
-    back to the full spec pool when no vendor equipment matches, so single-equipment
-    ("general") documents behave exactly as before.
+def _flatten_parameters(
+    requirements: list["Requirement | RequirementParameter"],
+) -> list["RequirementParameter"]:
+    """Expand hierarchical Requirements (equipment) into their flat parameter list.
+
+    Tolerates being handed parameters directly (an item without a ``parameters``
+    attribute is treated as a parameter itself), so callers and tests can pass
+    either shape.
     """
+    parameters: list["RequirementParameter"] = []
+    for requirement in requirements:
+        children = getattr(requirement, "parameters", None)
+        if children is None:
+            parameters.append(requirement)  # already a parameter
+        else:
+            parameters.extend(children)
+    return parameters
+
+
+def match_requirements(
+    requirements: list["Requirement | RequirementParameter"],
+    specifications: list["ExtractedSpecification"],
+) -> list[MatchOutcome]:
+    """Equipment-first matching over the hierarchy: each Requirement is one
+    equipment/item; its parameters are compared only against the vendor equipment
+    group that best corresponds to it. Falls back to the full spec pool when no
+    vendor equipment matches, so single-equipment ("general") documents behave
+    exactly as before.
+    """
+    parameters = _flatten_parameters(requirements)
     spec_groups = _group_specs_by_equipment(specifications)
 
-    # Resolve the scoped spec pool once per RFP equipment group, not per requirement.
+    # Resolve the scoped spec pool once per equipment group, not per parameter.
     scoped_specs_by_equipment: dict[str, list["ExtractedSpecification"]] = {}
-    for requirement in requirements:
-        equipment_key = requirement.equipment_key
+    for parameter in parameters:
+        equipment_key = parameter.equipment_key
         if equipment_key not in scoped_specs_by_equipment:
             matched = _match_vendor_equipment(
-                equipment_key, requirement.equipment_label, spec_groups
+                equipment_key, parameter.equipment_label, spec_groups
             )
             scoped_specs_by_equipment[equipment_key] = (
                 matched if matched is not None else specifications
             )
 
     return [
-        evaluate_requirement(requirement, scoped_specs_by_equipment[requirement.equipment_key])
-        for requirement in requirements
+        evaluate_requirement(parameter, scoped_specs_by_equipment[parameter.equipment_key])
+        for parameter in parameters
     ]

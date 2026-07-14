@@ -54,22 +54,32 @@ export interface Document {
   created_at: string
 }
 
-export interface ExtractedRequirement {
+// A single parameter of a requirement with its Minimum Required Specification.
+export interface RequirementParameter {
   id: string
-  document_id: string
-  project_id: string
-  equipment_key: string
-  equipment_label: string
-  requirement_key: string
-  requirement_label: string
-  category: string | null
-  requirement_text: string
+  requirement_id: string
+  parameter_key: string
+  parameter_label: string
+  parameter_text: string
   expected_value: string | null
   unit: string | null
   operator: string | null
   is_mandatory: boolean
   source_page: number | null
   created_at: string
+}
+
+// A requirement is one equipment/item and holds a list of parameters.
+export interface Requirement {
+  id: string
+  document_id: string
+  project_id: string
+  equipment_key: string
+  equipment_label: string
+  category: string | null
+  source_page: number | null
+  created_at: string
+  parameters: RequirementParameter[]
 }
 
 export interface ExtractedSpecification {

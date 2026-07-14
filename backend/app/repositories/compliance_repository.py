@@ -6,15 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from app.models.compliance import ComplianceMatrixEntry
-from app.models.extraction import ExtractedRequirement, ExtractedSpecification
+from app.models.extraction import ExtractedSpecification, RequirementParameter
 from app.models.vendor import Vendor
 
-# Heavy columns (per-row duplicated audit blob + embedding vector) that no request-path
-# consumer reads. Deferring them keeps the matrix/summary/report joins from timing out.
+# Heavy columns (embedding vector + audit blob) that no request-path consumer
+# reads. Deferring them keeps the matrix/summary/report joins from timing out.
 _DEFERRED_COLUMNS = (
-    defer(ExtractedRequirement.embedding),
-    defer(ExtractedRequirement.raw_llm_response),
-    defer(ExtractedRequirement.source_span),
+    defer(RequirementParameter.embedding),
+    defer(RequirementParameter.source_span),
     defer(ExtractedSpecification.embedding),
     defer(ExtractedSpecification.raw_llm_response),
     defer(ExtractedSpecification.source_span),
@@ -38,8 +37,8 @@ class ComplianceRepository:
         self, project_id: uuid.UUID, vendor_id: uuid.UUID | None = None
     ) -> Sequence[Row]:
         stmt = (
-            select(ComplianceMatrixEntry, ExtractedRequirement, ExtractedSpecification, Vendor.name)
-            .join(ExtractedRequirement, ComplianceMatrixEntry.requirement_id == ExtractedRequirement.id)
+            select(ComplianceMatrixEntry, RequirementParameter, ExtractedSpecification, Vendor.name)
+            .join(RequirementParameter, ComplianceMatrixEntry.parameter_id == RequirementParameter.id)
             .outerjoin(
                 ExtractedSpecification,
                 ComplianceMatrixEntry.matched_specification_id == ExtractedSpecification.id,

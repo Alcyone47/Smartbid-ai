@@ -19,7 +19,7 @@ from app.services.matching.normalization import (
 )
 
 if TYPE_CHECKING:  # avoid a hard import; matchers only read attributes
-    from app.models.extraction import ExtractedRequirement, ExtractedSpecification
+    from app.models.extraction import ExtractedSpecification, RequirementParameter  # type-only
 
 NUMERIC = "numeric"
 BOOLEAN = "boolean"
@@ -30,7 +30,7 @@ NUMERIC_OPERATORS = {">", ">=", "<", "<=", "==", "="}
 _MAX_LIST_ITEM_WORDS = 4  # guard so prose sentences aren't misread as lists
 
 
-def infer_type(requirement: "ExtractedRequirement") -> str:
+def infer_type(requirement: "RequirementParameter") -> str:
     """Classify a requirement's comparison type deterministically."""
     expected = requirement.expected_value
     operator = (requirement.operator or "").strip()
@@ -60,7 +60,7 @@ def _looks_like_list(value: str | None) -> bool:
 
 
 def numeric_operands(
-    requirement: "ExtractedRequirement", spec: "ExtractedSpecification"
+    requirement: "RequirementParameter", spec: "ExtractedSpecification"
 ) -> tuple[float | None, str | None, float | None, str | None]:
     """(expected_number, expected_unit, actual_number, actual_unit)."""
     exp_num, exp_unit = parse_value_unit(requirement.expected_value)
@@ -74,7 +74,7 @@ def numeric_operands(
 
 
 def boolean_operands(
-    requirement: "ExtractedRequirement", spec: "ExtractedSpecification"
+    requirement: "RequirementParameter", spec: "ExtractedSpecification"
 ) -> tuple[bool | None, bool | None]:
     req_bool = parse_boolean(requirement.expected_value)
     if req_bool is None:
@@ -86,7 +86,7 @@ def boolean_operands(
 
 
 def list_operands(
-    requirement: "ExtractedRequirement", spec: "ExtractedSpecification"
+    requirement: "RequirementParameter", spec: "ExtractedSpecification"
 ) -> tuple[list[str], list[str]]:
     required = split_list(requirement.expected_value) or split_list(requirement.requirement_text)
     provided_source = " , ".join(filter(None, [spec.value, spec.spec_text]))
@@ -95,7 +95,7 @@ def list_operands(
 
 
 def text_operands(
-    requirement: "ExtractedRequirement", spec: "ExtractedSpecification"
+    requirement: "RequirementParameter", spec: "ExtractedSpecification"
 ) -> tuple[str, str]:
     req_phrase = normalize_phrase(
         requirement.expected_value or requirement.requirement_text or requirement.requirement_label

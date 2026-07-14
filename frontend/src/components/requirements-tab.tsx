@@ -1,5 +1,5 @@
 import { useRequirements } from "@/hooks/use-extraction"
-import type { Document } from "@/types/api"
+import type { Document, Requirement } from "@/types/api"
 
 const PRIORITY_COLOR: Record<string, string> = {
   true: "#DC2626",
@@ -29,10 +29,10 @@ export function RequirementsTab({ projectId, rfpDocument }: { projectId: string;
           <tr className="bg-background">
             <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">#</th>
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
-              Requirement
+              Parameter
             </th>
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
-              Category
+              Minimum Required Specification
             </th>
             <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
               Mandatory
@@ -40,31 +40,58 @@ export function RequirementsTab({ projectId, rfpDocument }: { projectId: string;
           </tr>
         </thead>
         <tbody>
-          {requirements.map((r, i) => (
-            <tr key={r.id} className="border-t border-slate-100">
-              <td className="px-5 py-3 text-[12.5px] text-slate-400">{String(i + 1).padStart(2, "0")}</td>
-              <td className="max-w-105 px-3 py-3 text-[13px] font-medium text-foreground">
-                {r.requirement_text}
-                {r.expected_value ? (
-                  <span className="ml-1.5 text-xs text-muted-foreground">
-                    ({r.operator ?? ""} {r.expected_value} {r.unit ?? ""})
-                  </span>
-                ) : null}
-              </td>
-              <td className="px-3 py-3 text-[12.5px] text-slate-500">{r.category ?? "—"}</td>
-              <td className="px-5 py-3">
-                <span
-                  className="text-[11.5px] font-semibold"
-                  style={{ color: PRIORITY_COLOR[String(r.is_mandatory)] }}
-                >
-                  {r.is_mandatory ? "Mandatory" : "Optional"}
-                </span>
-              </td>
-            </tr>
+          {requirements.map((requirement) => (
+            <RequirementGroup key={requirement.id} requirement={requirement} />
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+function RequirementGroup({ requirement }: { requirement: Requirement }) {
+  return (
+    <>
+      <tr className="border-t border-border bg-background/60">
+        <td colSpan={4} className="px-5 py-2.5">
+          <span className="text-[13px] font-semibold text-foreground">{requirement.equipment_label}</span>
+          {requirement.category ? (
+            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+              {requirement.category}
+            </span>
+          ) : null}
+          <span className="ml-2 text-[11.5px] text-slate-400">
+            {requirement.parameters.length} parameter{requirement.parameters.length === 1 ? "" : "s"}
+          </span>
+        </td>
+      </tr>
+      {requirement.parameters.map((p, i) => (
+        <tr key={p.id} className="border-t border-slate-100">
+          <td className="px-5 py-3 text-[12.5px] text-slate-400">{String(i + 1).padStart(2, "0")}</td>
+          <td className="max-w-105 px-3 py-3 text-[13px] font-medium text-foreground">
+            {p.parameter_label}
+            <span className="block text-[12px] font-normal text-muted-foreground">{p.parameter_text}</span>
+          </td>
+          <td className="px-3 py-3 text-[12.5px] text-slate-500">
+            {p.expected_value ? (
+              <span>
+                {p.operator ?? ""} {p.expected_value} {p.unit ?? ""}
+              </span>
+            ) : (
+              "—"
+            )}
+          </td>
+          <td className="px-5 py-3">
+            <span
+              className="text-[11.5px] font-semibold"
+              style={{ color: PRIORITY_COLOR[String(p.is_mandatory)] }}
+            >
+              {p.is_mandatory ? "Mandatory" : "Optional"}
+            </span>
+          </td>
+        </tr>
+      ))}
+    </>
   )
 }
 

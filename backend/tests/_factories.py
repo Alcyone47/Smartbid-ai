@@ -1,6 +1,6 @@
-"""In-memory model factories for matching tests (no DB session needed)."""
+"""In-memory model factories for matching/report tests (no DB session needed)."""
 
-from app.models.extraction import ExtractedRequirement, ExtractedSpecification
+from app.models.extraction import ExtractedSpecification, Requirement, RequirementParameter
 
 
 def make_requirement(
@@ -15,18 +15,43 @@ def make_requirement(
     category: str | None = None,
     equipment_key: str = "general",
     equipment_label: str = "General",
-) -> ExtractedRequirement:
-    return ExtractedRequirement(
+) -> RequirementParameter:
+    """Build a single Parameter (with its Minimum Required Specification).
+
+    In the hierarchy a Parameter is what the matching engine compares, so this is
+    what the engine/report tests feed in. equipment_key/label are denormalized
+    onto it exactly as the worker persists them.
+    """
+    return RequirementParameter(
         equipment_key=equipment_key,
         equipment_label=equipment_label,
-        requirement_key=key,
-        requirement_label=label,
-        requirement_text=text,
+        category=category,
+        parameter_key=key,
+        parameter_label=label,
+        parameter_text=text,
         expected_value=expected_value,
         unit=unit,
         operator=operator,
         is_mandatory=is_mandatory,
+    )
+
+
+def make_requirement_group(
+    *,
+    equipment_key: str = "general",
+    equipment_label: str = "General",
+    parameters: list[RequirementParameter],
+    category: str | None = None,
+) -> Requirement:
+    """Build a parent Requirement (one equipment/item) holding parameters."""
+    for parameter in parameters:
+        parameter.equipment_key = equipment_key
+        parameter.equipment_label = equipment_label
+    return Requirement(
+        equipment_key=equipment_key,
+        equipment_label=equipment_label,
         category=category,
+        parameters=parameters,
     )
 
 

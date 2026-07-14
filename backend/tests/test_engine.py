@@ -3,7 +3,38 @@ from pathlib import Path
 import app.services.matching as matching_pkg
 from app.services.matching import evaluate_requirement, match_requirements
 from app.services.matching.matchers import MATCH, NO_MATCH, PARTIAL
-from tests._factories import make_requirement, make_specification
+from tests._factories import make_requirement, make_requirement_group, make_specification
+
+
+def test_match_requirements_consumes_hierarchy():
+    """match_requirements accepts parent Requirements (equipment) and flattens to
+    their parameters, scoping each to its own equipment's vendor specs."""
+    switch = make_requirement_group(
+        equipment_key="core_switch",
+        equipment_label="Core Switch",
+        parameters=[
+            make_requirement(key="throughput", label="Throughput", expected_value="20", unit="Mbps", operator=">="),
+            make_requirement(key="ports", label="Ports", expected_value="24", unit=None, operator=">="),
+        ],
+    )
+    ups = make_requirement_group(
+        equipment_key="ups_unit",
+        equipment_label="UPS Unit",
+        parameters=[
+            make_requirement(key="capacity", label="Capacity", expected_value="20", unit="KVA", operator=">="),
+        ],
+    )
+    specs = [
+        make_specification(key="throughput", label="Throughput", value="2", unit="Gbps",
+                           equipment_key="core_switch", equipment_label="Core Switch"),
+        make_specification(key="ports", label="Ports", value="48",
+                           equipment_key="core_switch", equipment_label="Core Switch"),
+        make_specification(key="capacity", label="Capacity", value="25", unit="KVA",
+                           equipment_key="ups_unit", equipment_label="UPS Unit"),
+    ]
+    outcomes = match_requirements([switch, ups], specs)
+    assert len(outcomes) == 3  # one per parameter across both equipment
+    assert all(o.status == MATCH for o in outcomes)
 
 
 def test_numeric_end_to_end_unit_normalized():

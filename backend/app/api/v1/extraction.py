@@ -10,7 +10,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.specification_repository import SpecificationRepository
 from app.schemas.document import DocumentRead
-from app.schemas.extraction import ExtractedRequirementRead, ExtractedSpecificationRead
+from app.schemas.extraction import ExtractedSpecificationRead, RequirementRead
 from app.workers.document_tasks import process_document
 
 router = APIRouter(prefix="/projects/{project_id}/documents/{document_id}", tags=["extraction"])
@@ -32,13 +32,13 @@ async def trigger_extraction(
     return document
 
 
-@router.get("/requirements", response_model=list[ExtractedRequirementRead])
+@router.get("/requirements", response_model=list[RequirementRead])
 async def list_requirements(
     project_id: uuid.UUID,
     document_id: uuid.UUID,
     current_user: CurrentUser = Depends(get_current_org_user),
     db: AsyncSession = Depends(get_db),
-) -> list[ExtractedRequirementRead]:
+) -> list[RequirementRead]:
     await _get_org_project(project_id, current_user.org_id, db)
     document_repo = DocumentRepository(db)
     await document_repo.get_by_id(document_id, current_user.org_id)

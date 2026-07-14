@@ -33,27 +33,27 @@ class ReportRow:
 def build_report_rows(rows: Iterable[Sequence]) -> list[ReportRow]:
     """Adapt ``ComplianceRepository.list_by_project_with_details`` tuples.
 
-    Each row is ``(ComplianceMatrixEntry, ExtractedRequirement,
+    Each row is ``(ComplianceMatrixEntry, RequirementParameter,
     ExtractedSpecification | None, vendor_name)``.
     """
     report_rows: list[ReportRow] = []
-    for entry, requirement, specification, vendor_name in rows:
+    for entry, parameter, specification, vendor_name in rows:
         vendor_value = None
-        source_page = requirement.source_page
+        source_page = parameter.source_page
         if specification is not None:
             vendor_value = specification.value or specification.spec_text
             source_page = specification.source_page
         report_rows.append(
             ReportRow(
-                equipment_key=requirement.equipment_key,
-                equipment_label=requirement.equipment_label,
-                requirement_label=requirement.requirement_label,
-                requirement_text=requirement.requirement_text,
-                category=requirement.category,
-                is_mandatory=requirement.is_mandatory,
-                expected_value=requirement.expected_value,
-                unit=requirement.unit,
-                operator=requirement.operator,
+                equipment_key=parameter.equipment_key,
+                equipment_label=parameter.equipment_label,
+                requirement_label=parameter.parameter_label,
+                requirement_text=parameter.parameter_text,
+                category=parameter.category,
+                is_mandatory=parameter.is_mandatory,
+                expected_value=parameter.expected_value,
+                unit=parameter.unit,
+                operator=parameter.operator,
                 vendor_name=vendor_name,
                 vendor_value=vendor_value,
                 status=entry.status,

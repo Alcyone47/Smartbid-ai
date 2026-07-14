@@ -7,7 +7,7 @@ from app.core.exceptions import LLMRateLimitError, UnsupportedDocumentTypeError
 from app.core.llm.backoff import compute_backoff
 from app.core.llm.factory import get_llm_provider
 from app.db.session import async_session_maker, engine
-from app.models.extraction import ExtractedRequirement, ExtractedSpecification
+from app.models.extraction import ExtractedSpecification, Requirement, RequirementParameter
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.specification_repository import SpecificationRepository
@@ -38,22 +38,35 @@ async def _process_document_async(document_id: str) -> None:
             )
             requirement_repo = RequirementRepository(db)
             requirements = [
-                ExtractedRequirement(
+                Requirement(
                     org_id=document.org_id,
                     document_id=document.id,
                     project_id=document.project_id,
-                    equipment_key=item.equipment_key,
-                    equipment_label=item.equipment_label,
-                    requirement_key=item.requirement_key,
-                    requirement_label=item.requirement_label,
+                    # The LLM's requirement_key/label identify the equipment/item.
+                    equipment_key=item.requirement_key,
+                    equipment_label=item.requirement_label,
                     category=item.category,
-                    requirement_text=item.requirement_text,
-                    expected_value=item.expected_value,
-                    unit=item.unit,
-                    operator=item.operator,
-                    is_mandatory=item.is_mandatory,
                     source_page=item.source_page,
                     raw_llm_response=outcome.raw_response,
+                    parameters=[
+                        RequirementParameter(
+                            org_id=document.org_id,
+                            document_id=document.id,
+                            project_id=document.project_id,
+                            equipment_key=item.requirement_key,
+                            equipment_label=item.requirement_label,
+                            category=item.category,
+                            parameter_key=param.parameter_key,
+                            parameter_label=param.parameter_label,
+                            parameter_text=param.parameter_text,
+                            expected_value=param.expected_value,
+                            unit=param.unit,
+                            operator=param.operator,
+                            is_mandatory=param.is_mandatory,
+                            source_page=param.source_page,
+                        )
+                        for param in item.parameters
+                    ],
                 )
                 for item in outcome.result.requirements
             ]

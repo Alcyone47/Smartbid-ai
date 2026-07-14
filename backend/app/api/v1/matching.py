@@ -25,22 +25,22 @@ router = APIRouter(prefix="/projects/{project_id}", tags=["matching"])
 
 
 def _to_spec_comparison(row: Row) -> EquipmentSpecComparison:
-    entry, requirement, specification, _vendor_name = row
+    entry, parameter, specification, _vendor_name = row
     vendor_value = None
-    source_page = requirement.source_page
+    source_page = parameter.source_page
     if specification is not None:
         vendor_value = specification.value or specification.spec_text
         source_page = specification.source_page
     return EquipmentSpecComparison(
         id=entry.id,
-        requirement_id=entry.requirement_id,
+        requirement_id=entry.parameter_id,
         matched_specification_id=entry.matched_specification_id,
-        requirement_label=requirement.requirement_label,
-        requirement_text=requirement.requirement_text,
-        expected_value=requirement.expected_value,
-        unit=requirement.unit,
-        operator=requirement.operator,
-        is_mandatory=requirement.is_mandatory,
+        requirement_label=parameter.parameter_label,
+        requirement_text=parameter.parameter_text,
+        expected_value=parameter.expected_value,
+        unit=parameter.unit,
+        operator=parameter.operator,
+        is_mandatory=parameter.is_mandatory,
         vendor_value=vendor_value,
         source_page=source_page,
         status=entry.status,
@@ -50,18 +50,18 @@ def _to_spec_comparison(row: Row) -> EquipmentSpecComparison:
 
 
 def _group_by_equipment(rows: Sequence[Row]) -> list[EquipmentComplianceGroup]:
-    """Fold flat (entry, requirement, specification, vendor_name) rows into one
-    group per (vendor, equipment), computing fractional-credit compliance.
+    """Fold (entry, parameter, specification, vendor_name) rows into one group per
+    (vendor, equipment/requirement), computing fractional-credit compliance.
     """
     groups: dict[tuple[uuid.UUID, str], dict] = {}
     order: list[tuple[uuid.UUID, str]] = []
     for row in rows:
-        entry, requirement, _specification, vendor_name = row
-        key = (entry.vendor_id, requirement.equipment_key)
+        entry, parameter, _specification, vendor_name = row
+        key = (entry.vendor_id, parameter.equipment_key)
         if key not in groups:
             groups[key] = {
-                "equipment_key": requirement.equipment_key,
-                "equipment_label": requirement.equipment_label,
+                "equipment_key": parameter.equipment_key,
+                "equipment_label": parameter.equipment_label,
                 "vendor_name": vendor_name,
                 "vendor_id": entry.vendor_id,
                 "credit_sum": 0.0,
@@ -133,7 +133,7 @@ async def trigger_matching(
         ComplianceMatrixEntry(
             org_id=current_user.org_id,
             project_id=project_id,
-            requirement_id=outcome.requirement.id,
+            parameter_id=outcome.requirement.id,
             vendor_id=vendor_id,
             matched_specification_id=(
                 outcome.matched_specification.id if outcome.matched_specification else None
@@ -181,9 +181,9 @@ async def compliance_summary(
             vendor_name=vendor_name,
             status=entry.status,
             match_score=entry.match_score,
-            is_mandatory=requirement.is_mandatory,
+            is_mandatory=parameter.is_mandatory,
         )
-        for entry, requirement, _specification, vendor_name in rows
+        for entry, parameter, _specification, vendor_name in rows
     ]
     summaries = compute_compliance_summary(scored)
     return [VendorComplianceSummaryRead(**vars(summary)) for summary in summaries]

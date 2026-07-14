@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     extraction_max_chars_per_batch: int = 48000
     extraction_max_output_tokens: int = 4000
 
+    # Before extracting requirements, a semantic LLM "structure analysis" pass
+    # classifies each RFP section as technical vs non-technical so only technical
+    # specification pages are extracted. structure_analysis_max_chars caps the
+    # compact structure digest (TOC + headings + page/table hints) sent to that
+    # single classify call — not the full document body. If disabled or the pass
+    # finds no technical sections, extraction falls back to all pages.
+    structure_analysis_enabled: bool = True
+    structure_analysis_max_chars: int = 12000
+
     # Rate-limit (HTTP 429) handling: exponential backoff with jitter, capped, honoring
     # the server's suggested retryDelay/Retry-After when larger. Used both for in-call
     # provider retries and the Celery task's automatic re-queue.

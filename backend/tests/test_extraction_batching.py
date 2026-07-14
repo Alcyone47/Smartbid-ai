@@ -10,8 +10,19 @@ from app.services.extraction_service import (
 def test_parse_batch_items_skips_malformed_keeps_valid():
     data = {
         "requirements": [
-            {"requirement_key": "k1", "requirement_label": "Good One", "requirement_text": "t", "is_mandatory": True},
-            {"equipment_key": "wifi", "requirement_text": "missing label", "is_mandatory": True},  # no requirement_label
+            {
+                "requirement_key": "switch",
+                "requirement_label": "Good One",
+                "parameters": [
+                    {"parameter_key": "p", "parameter_label": "P", "parameter_text": "t", "is_mandatory": True}
+                ],
+            },
+            {
+                "requirement_key": "ups",
+                "requirement_label": "Bad One",
+                # parameter is missing the required parameter_label -> whole item invalid
+                "parameters": [{"parameter_key": "p", "parameter_text": "missing label"}],
+            },
         ]
     }
     items, skipped = _parse_batch_items(data, "requirements", RequirementExtractionItem)
