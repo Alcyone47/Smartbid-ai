@@ -23,7 +23,7 @@ export function useComplianceSummary(projectId: string) {
 export function useTriggerMatching(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (documentId: string) => matchingApi.trigger(projectId, documentId),
+    mutationFn: (vendorId: string) => matchingApi.trigger(projectId, vendorId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: complianceMatrixKey(projectId) })
       queryClient.invalidateQueries({ queryKey: complianceSummaryKey(projectId) })

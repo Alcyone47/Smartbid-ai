@@ -16,11 +16,15 @@ class Document(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     doc_type: Mapped[str] = mapped_column(String, nullable=False)
     vendor_name: Mapped[str | None] = mapped_column(String)
+    # Set for vendor_proposal documents; groups multiple PDFs under one vendor.
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vendors.id", ondelete="CASCADE"), index=True
+    )
     storage_path: Mapped[str] = mapped_column(String, nullable=False)
     original_filename: Mapped[str] = mapped_column(String, nullable=False)
     mime_type: Mapped[str] = mapped_column(String, nullable=False)
     page_count: Mapped[int | None] = mapped_column()
-    status: Mapped[str] = mapped_column(String, nullable=False, server_default="uploaded")
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default="queued")
     extraction_progress: Mapped[int] = mapped_column(nullable=False, server_default=text("0"))
     error_message: Mapped[str | None] = mapped_column(String)
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)

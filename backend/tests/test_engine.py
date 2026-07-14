@@ -56,6 +56,68 @@ def test_match_requirements_maps_all():
     assert len(outcomes) == 2 and all(o.status == NO_MATCH for o in outcomes)
 
 
+def test_equipment_scopes_pairing():
+    """A requirement must only pair with a spec from its OWN equipment, even when a
+    different equipment has an identically-labelled spec with a better value."""
+    req = make_requirement(
+        key="throughput",
+        label="Throughput",
+        expected_value="20",
+        unit="Mbps",
+        operator=">=",
+        equipment_key="access_switch",
+        equipment_label="Access Switch",
+    )
+    # Same spec label under a different equipment, with a value that would MATCH.
+    other_equipment_spec = make_specification(
+        key="throughput",
+        label="Throughput",
+        value="100",
+        unit="Mbps",
+        equipment_key="core_switch",
+        equipment_label="Core Switch",
+    )
+    # The correct equipment's spec falls short -> should be a PARTIAL/NO_MATCH, not
+    # a MATCH borrowed from the other equipment.
+    own_equipment_spec = make_specification(
+        key="throughput",
+        label="Throughput",
+        value="18",
+        unit="Mbps",
+        equipment_key="access_switch",
+        equipment_label="Access Switch",
+    )
+    [outcome] = match_requirements(req_list := [req], [other_equipment_spec, own_equipment_spec])
+    assert req_list  # silence linters about the walrus
+    assert outcome.matched_specification is own_equipment_spec
+    assert outcome.status != MATCH
+
+
+def test_equipment_fallback_when_no_group_matches():
+    """When no vendor equipment matches the RFP equipment, fall back to the full spec
+    pool so single-item / mislabelled documents still get compared."""
+    req = make_requirement(
+        key="throughput",
+        label="Throughput",
+        expected_value="20",
+        unit="Mbps",
+        operator=">=",
+        equipment_key="switch_alpha",
+        equipment_label="Switch Alpha",
+    )
+    spec = make_specification(
+        key="throughput",
+        label="Throughput",
+        value="25",
+        unit="Mbps",
+        equipment_key="totally_unrelated_widget",
+        equipment_label="Totally Unrelated Widget",
+    )
+    [outcome] = match_requirements([req], [spec])
+    assert outcome.matched_specification is spec
+    assert outcome.status == MATCH
+
+
 def test_engine_never_imports_llm():
     """Static guard: no module in the matching package may import the LLM layer."""
     package_dir = Path(matching_pkg.__file__).parent

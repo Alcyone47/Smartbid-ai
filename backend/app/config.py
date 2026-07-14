@@ -31,12 +31,20 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     llm_provider: str = "claude"
 
-    # Extraction is chunked so a single LLM call never exceeds the provider's
-    # context window / per-minute token budget. Budget is measured in characters of
-    # source text per call (~4 chars/token). Defaults keep a single Groq request
-    # (input + reserved output) under the free-tier 12k tokens-per-minute limit.
-    extraction_max_chars_per_batch: int = 24000
+    # Extraction is chunked into page groups so a single LLM call covers 5–10 pages
+    # (not one call per page) while staying under the model's context window. A batch
+    # closes at whichever limit hits first: extraction_pages_per_batch distinct pages,
+    # or extraction_max_chars_per_batch characters of source text (~4 chars/token).
+    extraction_pages_per_batch: int = 8
+    extraction_max_chars_per_batch: int = 48000
     extraction_max_output_tokens: int = 4000
+
+    # Rate-limit (HTTP 429) handling: exponential backoff with jitter, capped, honoring
+    # the server's suggested retryDelay/Retry-After when larger. Used both for in-call
+    # provider retries and the Celery task's automatic re-queue.
+    extraction_max_retries: int = 5
+    extraction_retry_base_delay: float = 2.0
+    extraction_retry_max_delay: float = 60.0
 
     @property
     def cors_origins(self) -> list[str]:

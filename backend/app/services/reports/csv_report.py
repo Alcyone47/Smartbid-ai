@@ -8,6 +8,7 @@ import io
 from app.services.reports.data import ReportRow, status_label
 
 _HEADER = [
+    "Equipment",
     "Requirement",
     "Detail",
     "Category",
@@ -31,6 +32,7 @@ def generate_matrix_csv(rows: list[ReportRow]) -> bytes:
     for row in rows:
         writer.writerow(
             [
+                row.equipment_label,
                 row.requirement_label,
                 row.requirement_text,
                 row.category or "",

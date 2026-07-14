@@ -34,7 +34,7 @@ export function useVendorSummaries() {
             documents[0].created_at,
           )
           const hasFailed = documents.some((d) => d.status === "failed")
-          const allExtracted = documents.every((d) => d.status === "extracted")
+          const allExtracted = documents.every((d) => d.status === "completed")
           const status: VendorSummary["status"] = hasFailed ? "Needs Review" : allExtracted ? "Active" : "In Progress"
           return { vendorName, documentCount: documents.length, lastUpdated, status }
         })

@@ -6,6 +6,7 @@ export interface Project {
   name: string
   client_name: string | null
   status: ProjectStatus
+  status_override: ProjectStatus | null
   created_by: string
   created_at: string
   updated_at: string
@@ -19,12 +20,21 @@ export interface ProjectCreateInput {
 export interface ProjectUpdateInput {
   name?: string
   client_name?: string | null
-  status?: string
+  // null clears the override (back to auto-derived); omit to leave unchanged.
+  status_override?: ProjectStatus | null
 }
 
 export type DocType = "rfp" | "vendor_proposal"
 
-export type DocumentStatus = "uploaded" | "processing" | "extracted" | "failed" | string
+export type DocumentStatus = "queued" | "extracting" | "retrying" | "completed" | "failed" | string
+
+export interface Vendor {
+  id: string
+  project_id: string
+  name: string
+  document_count: number
+  created_at: string
+}
 
 export interface Document {
   id: string
@@ -32,6 +42,7 @@ export interface Document {
   project_id: string
   doc_type: DocType
   vendor_name: string | null
+  vendor_id: string | null
   storage_path: string
   original_filename: string
   mime_type: string
@@ -47,6 +58,8 @@ export interface ExtractedRequirement {
   id: string
   document_id: string
   project_id: string
+  equipment_key: string
+  equipment_label: string
   requirement_key: string
   requirement_label: string
   category: string | null
@@ -64,6 +77,8 @@ export interface ExtractedSpecification {
   document_id: string
   project_id: string
   vendor_name: string
+  equipment_key: string
+  equipment_label: string
   spec_key: string
   spec_label: string
   spec_text: string
@@ -75,13 +90,10 @@ export interface ExtractedSpecification {
 
 export type ComplianceStatus = "match" | "partial" | "no_match"
 
-export interface ComplianceMatrixEntry {
+export interface EquipmentSpecComparison {
   id: string
-  project_id: string
   requirement_id: string
-  vendor_document_id: string
   matched_specification_id: string | null
-  vendor_name: string
   requirement_label: string
   requirement_text: string
   expected_value: string | null
@@ -93,7 +105,19 @@ export interface ComplianceMatrixEntry {
   status: ComplianceStatus
   match_score: number | string | null
   rationale: string
-  computed_at: string
+}
+
+export interface EquipmentComplianceGroup {
+  equipment_key: string
+  equipment_label: string
+  vendor_name: string
+  vendor_id: string
+  compliance_pct: number
+  total_specs: number
+  matched: number
+  partial: number
+  unmatched: number
+  specs: EquipmentSpecComparison[]
 }
 
 export interface VendorComplianceSummary {

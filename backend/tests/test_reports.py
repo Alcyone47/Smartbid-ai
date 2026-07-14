@@ -25,8 +25,8 @@ def _summary(vendor="Acme", pct=72.7):
 
 def _rows():
     return [
-        ReportRow("Throughput", ">= 20 Mbps", "Networking", True, "20", "Mbps", ">=", "Acme", "2 Gbps", "match", 100, "ok", 2),
-        ReportRow("UPS Capacity", "20 KVA", "Power", True, "20", "KVA", "=", "Acme", None, "no_match", 0, "not found", None),
+        ReportRow("core_switch", "Core Switch", "Throughput", ">= 20 Mbps", "Networking", True, "20", "Mbps", ">=", "Acme", "2 Gbps", "match", 100, "ok", 2),
+        ReportRow("ups_unit", "UPS Unit", "UPS Capacity", "20 KVA", "Power", True, "20", "KVA", "=", "Acme", None, "no_match", 0, "not found", None),
     ]
 
 
@@ -55,7 +55,7 @@ def test_csv_has_header_and_row_per_entry():
     content = generate_matrix_csv(_rows())
     text = content.decode("utf-8-sig")
     lines = [line for line in text.splitlines() if line.strip()]
-    assert lines[0].startswith("Requirement,Detail,Category")
+    assert lines[0].startswith("Equipment,Requirement,Detail,Category")
     assert len(lines) == 3  # header + 2 rows
     assert "Throughput" in lines[1] and "UPS Capacity" in lines[2]
 
@@ -65,7 +65,7 @@ def test_xlsx_opens_with_both_sheets():
     content = generate_matrix_xlsx(project, _rows(), [_summary()])
     wb = openpyxl.load_workbook(io.BytesIO(content))
     assert wb.sheetnames == ["Summary", "Compliance Matrix"]
-    assert wb["Compliance Matrix"]["A1"].value == "Requirement"
+    assert wb["Compliance Matrix"]["A1"].value == "Equipment"
     assert "Enterprise SD-WAN" in wb["Summary"]["A1"].value
 
 
@@ -78,6 +78,6 @@ def test_pdf_has_pdf_header():
 
 def test_generators_handle_empty_rows():
     project = SimpleNamespace(name="Empty", client_name=None)
-    assert generate_matrix_csv([]).decode("utf-8-sig").strip().startswith("Requirement")
+    assert generate_matrix_csv([]).decode("utf-8-sig").strip().startswith("Equipment")
     assert openpyxl.load_workbook(io.BytesIO(generate_matrix_xlsx(project, [], [])))
     assert generate_summary_pdf(project, [], [])[:5] == b"%PDF-"

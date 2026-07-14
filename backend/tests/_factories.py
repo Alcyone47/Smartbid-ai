@@ -13,8 +13,12 @@ def make_requirement(
     operator: str | None = None,
     is_mandatory: bool = True,
     category: str | None = None,
+    equipment_key: str = "general",
+    equipment_label: str = "General",
 ) -> ExtractedRequirement:
     return ExtractedRequirement(
+        equipment_key=equipment_key,
+        equipment_label=equipment_label,
         requirement_key=key,
         requirement_label=label,
         requirement_text=text,
@@ -34,8 +38,12 @@ def make_specification(
     value: str | None = None,
     unit: str | None = None,
     vendor_name: str = "Acme",
+    equipment_key: str = "general",
+    equipment_label: str = "General",
 ) -> ExtractedSpecification:
     return ExtractedSpecification(
+        equipment_key=equipment_key,
+        equipment_label=equipment_label,
         spec_key=key,
         spec_label=label,
         spec_text=text,

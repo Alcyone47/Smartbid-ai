@@ -1,17 +1,15 @@
 import uuid
-from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel
 
 
-class ComplianceMatrixEntryRead(BaseModel):
+class EquipmentSpecComparison(BaseModel):
+    """One required-spec vs vendor-spec comparison within an equipment group."""
+
     id: uuid.UUID
-    project_id: uuid.UUID
     requirement_id: uuid.UUID
-    vendor_document_id: uuid.UUID
     matched_specification_id: uuid.UUID | None
-    vendor_name: str
     requirement_label: str
     requirement_text: str
     expected_value: str | None
@@ -23,7 +21,21 @@ class ComplianceMatrixEntryRead(BaseModel):
     status: str
     match_score: Decimal | None
     rationale: str
-    computed_at: datetime
+
+
+class EquipmentComplianceGroup(BaseModel):
+    """One equipment/item for a vendor, with its per-spec comparisons and overall compliance."""
+
+    equipment_key: str
+    equipment_label: str
+    vendor_name: str
+    vendor_id: uuid.UUID
+    compliance_pct: float
+    total_specs: int
+    matched: int
+    partial: int
+    unmatched: int
+    specs: list[EquipmentSpecComparison]
 
 
 class VendorComplianceSummaryRead(BaseModel):

@@ -9,6 +9,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.dependencies import CurrentUser, get_current_org_user
 from app.models.document import Document
+from app.repositories.vendor_repository import VendorRepository
 from app.schemas.document import DocType, DocumentRead
 from app.services.storage import build_storage_path, upload_document
 
@@ -42,6 +43,12 @@ async def upload_project_document(
     if doc_type == "vendor_proposal" and not vendor_name:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="vendor_name is required for vendor proposals")
 
+    # A vendor may own multiple PDFs: reuse the vendor with this name or create it.
+    vendor_id = None
+    if doc_type == "vendor_proposal" and vendor_name:
+        vendor = await VendorRepository(db).get_or_create(current_user.org_id, project_id, vendor_name.strip())
+        vendor_id = vendor.id
+
     content = await file.read()
     storage_path = build_storage_path(current_user.org_id, project_id, file.filename or "document")
     await upload_document(settings.supabase_storage_bucket, storage_path, content, file.content_type or "application/octet-stream")
@@ -51,6 +58,7 @@ async def upload_project_document(
         project_id=project_id,
         doc_type=doc_type,
         vendor_name=vendor_name,
+        vendor_id=vendor_id,
         storage_path=storage_path,
         original_filename=file.filename or "document",
         mime_type=file.content_type or "application/octet-stream",

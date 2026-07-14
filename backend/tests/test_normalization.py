@@ -93,7 +93,13 @@ def test_time_equivalence_min_hr():
 
 
 def test_data_rate_equivalence_mbps_gbps():
-    assert convert_to_base(2000, "Mbps") == convert_to_base(2, "Gbps")
+    # Binary (1024-based) prefixes: 2048 Mbps == 2 Gbps.
+    assert convert_to_base(2048, "Mbps") == convert_to_base(2, "Gbps")
+
+
+def test_data_size_equivalence_mb_gb():
+    # The reported case: 2048 MB must equal 2 GB (binary/storage convention).
+    assert convert_to_base(2048, "MB") == convert_to_base(2, "GB")
 
 
 def test_voltage_kv_v():

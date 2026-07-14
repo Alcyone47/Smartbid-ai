@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 
 class RequirementExtractionItem(BaseModel):
+    equipment_key: str = "general"
+    equipment_label: str = "General"
     requirement_key: str
     requirement_label: str
     category: str | None = None
@@ -21,6 +23,8 @@ class RequirementExtractionResult(BaseModel):
 
 
 class SpecificationExtractionItem(BaseModel):
+    equipment_key: str = "general"
+    equipment_label: str = "General"
     spec_key: str
     spec_label: str
     spec_text: str
@@ -41,6 +45,8 @@ REQUIREMENT_EXTRACTION_JSON_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "equipment_key": {"type": "string"},
+                    "equipment_label": {"type": "string"},
                     "requirement_key": {"type": "string"},
                     "requirement_label": {"type": "string"},
                     "category": {"type": ["string", "null"]},
@@ -51,7 +57,14 @@ REQUIREMENT_EXTRACTION_JSON_SCHEMA = {
                     "is_mandatory": {"type": "boolean"},
                     "source_page": {"type": ["integer", "null"]},
                 },
-                "required": ["requirement_key", "requirement_label", "requirement_text", "is_mandatory"],
+                "required": [
+                    "equipment_key",
+                    "equipment_label",
+                    "requirement_key",
+                    "requirement_label",
+                    "requirement_text",
+                    "is_mandatory",
+                ],
             },
         }
     },
@@ -66,6 +79,8 @@ SPECIFICATION_EXTRACTION_JSON_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "equipment_key": {"type": "string"},
+                    "equipment_label": {"type": "string"},
                     "spec_key": {"type": "string"},
                     "spec_label": {"type": "string"},
                     "spec_text": {"type": "string"},
@@ -73,7 +88,7 @@ SPECIFICATION_EXTRACTION_JSON_SCHEMA = {
                     "unit": {"type": ["string", "null"]},
                     "source_page": {"type": ["integer", "null"]},
                 },
-                "required": ["spec_key", "spec_label", "spec_text"],
+                "required": ["equipment_key", "equipment_label", "spec_key", "spec_label", "spec_text"],
             },
         }
     },
@@ -85,6 +100,8 @@ class ExtractedRequirementRead(BaseModel):
     id: uuid.UUID
     document_id: uuid.UUID
     project_id: uuid.UUID
+    equipment_key: str
+    equipment_label: str
     requirement_key: str
     requirement_label: str
     category: str | None
@@ -104,6 +121,8 @@ class ExtractedSpecificationRead(BaseModel):
     document_id: uuid.UUID
     project_id: uuid.UUID
     vendor_name: str
+    equipment_key: str
+    equipment_label: str
     spec_key: str
     spec_label: str
     spec_text: str

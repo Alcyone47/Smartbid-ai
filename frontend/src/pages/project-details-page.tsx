@@ -1,6 +1,6 @@
-import { useState } from "react"
-import { Link, useParams } from "@tanstack/react-router"
-import { FileText, CheckCircle2, Circle } from "lucide-react"
+import { useMemo, useState } from "react"
+import { Link, useParams, useNavigate } from "@tanstack/react-router"
+import { FileText, CheckCircle2, Circle, Pencil, Trash2, ChevronDown, ChevronRight } from "lucide-react"
 import { useProject } from "@/hooks/use-projects"
 import { useDocuments } from "@/hooks/use-documents"
 import { useComplianceMatrix } from "@/hooks/use-matching"
@@ -11,14 +11,30 @@ import { RequirementsTab } from "@/components/requirements-tab"
 import { VendorsTab } from "@/components/vendors-tab"
 import { ComplianceMatrixTab } from "@/components/compliance-matrix-tab"
 import { ReportsPanel } from "@/components/reports-panel"
+import { EditProjectDialog } from "@/components/edit-project-dialog"
+import { DeleteProjectDialog } from "@/components/delete-project-dialog"
+import { DeleteVendorDialog } from "@/components/delete-vendor-dialog"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function ProjectDetailsPage() {
   const { projectId } = useParams({ from: "/_app/projects/$projectId" })
+  const navigate = useNavigate()
   const { data: project, isLoading: isProjectLoading } = useProject(projectId)
   const { data: documents } = useDocuments(projectId)
   const { data: complianceEntries } = useComplianceMatrix(projectId)
   const [tab, setTab] = useState("requirements")
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [collapsedVendors, setCollapsedVendors] = useState<Set<string>>(new Set())
+  const [removingVendor, setRemovingVendor] = useState<{ id: string; name: string } | null>(null)
+
+  const toggleVendor = (key: string) =>
+    setCollapsedVendors((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
 
   if (isProjectLoading || !project) {
     return <div className="py-10 text-center text-sm text-muted-foreground">Loading…</div>
@@ -28,8 +44,25 @@ export function ProjectDetailsPage() {
   const vendorDocuments = (documents ?? []).filter((d) => d.doc_type === "vendor_proposal")
   const rfpDocument = rfpDocuments[0]
 
-  const rfpExtracted = rfpDocument?.status === "extracted"
-  const vendorsExtracted = vendorDocuments.length > 0 && vendorDocuments.every((d) => d.status === "extracted")
+  const rfpExtracted = rfpDocument?.status === "completed"
+  const vendorsExtracted = vendorDocuments.length > 0 && vendorDocuments.every((d) => d.status === "completed")
+
+  // Group vendor datasheets under their vendor so multiple PDFs per vendor read as one group.
+  const vendorGroups = useMemo(() => {
+    const order: string[] = []
+    const byVendor = new Map<string, { name: string; vendorId: string | null; docs: typeof vendorDocuments }>()
+    for (const doc of vendorDocuments) {
+      const key = doc.vendor_id ?? doc.vendor_name ?? "Unassigned"
+      let group = byVendor.get(key)
+      if (!group) {
+        group = { name: doc.vendor_name ?? "Unassigned", vendorId: doc.vendor_id, docs: [] }
+        byVendor.set(key, group)
+        order.push(key)
+      }
+      group.docs.push(doc)
+    }
+    return order.map((key) => ({ key, ...byVendor.get(key)! }))
+  }, [vendorDocuments])
 
   return (
     <div>
@@ -52,7 +85,39 @@ export function ProjectDetailsPage() {
             {new Date(project.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil size={14} />
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 size={14} />
+            Delete
+          </Button>
+        </div>
       </div>
+
+      <EditProjectDialog project={project} open={editOpen} onOpenChange={setEditOpen} />
+      <DeleteProjectDialog
+        project={project}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onDeleted={() => navigate({ to: "/projects" })}
+      />
+      {removingVendor ? (
+        <DeleteVendorDialog
+          projectId={projectId}
+          vendorId={removingVendor.id}
+          vendorName={removingVendor.name}
+          open={!!removingVendor}
+          onOpenChange={() => setRemovingVendor(null)}
+        />
+      ) : null}
 
       <div className="mb-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
         <div className="flex flex-col gap-4">
@@ -94,11 +159,57 @@ export function ProjectDetailsPage() {
               <span className="text-[13.5px] font-semibold text-foreground">Uploaded Vendor Datasheets</span>
               <DocumentUploadDialog projectId={projectId} docType="vendor_proposal" triggerLabel="Add vendor" />
             </div>
-            <div className="flex flex-col gap-2">
-              {vendorDocuments.length === 0 ? (
+            <div className="flex flex-col gap-3.5">
+              {vendorGroups.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No vendor datasheets uploaded yet.</p>
               ) : (
-                vendorDocuments.map((doc) => <DocumentRow key={doc.id} projectId={projectId} document={doc} />)
+                vendorGroups.map((group) => {
+                  const isCollapsed = collapsedVendors.has(group.key)
+                  return (
+                    <div key={group.key} className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          onClick={() => toggleVendor(group.key)}
+                          className="flex min-w-0 items-center gap-1.5 text-left"
+                        >
+                          {isCollapsed ? (
+                            <ChevronRight size={14} className="shrink-0 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
+                          )}
+                          <span className="truncate text-[12px] font-semibold text-slate-600">{group.name}</span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground">
+                            {group.docs.length} {group.docs.length === 1 ? "file" : "files"}
+                          </span>
+                        </button>
+                        <div className="flex shrink-0 items-center gap-2.5">
+                          {!isCollapsed ? (
+                            <DocumentUploadDialog
+                              projectId={projectId}
+                              docType="vendor_proposal"
+                              triggerLabel="Add PDF"
+                              presetVendorName={group.name}
+                            />
+                          ) : null}
+                          {group.vendorId ? (
+                            <button
+                              onClick={() => setRemovingVendor({ id: group.vendorId as string, name: group.name })}
+                              title="Remove vendor"
+                              className="text-slate-300 hover:text-destructive"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      {!isCollapsed
+                        ? group.docs.map((doc) => (
+                            <DocumentRow key={doc.id} projectId={projectId} document={doc} />
+                          ))
+                        : null}
+                    </div>
+                  )
+                })
               )}
             </div>
           </div>
@@ -112,7 +223,7 @@ export function ProjectDetailsPage() {
                 label="RFP requirements extracted"
                 meta={
                   rfpDocument
-                    ? rfpDocument.status === "processing"
+                    ? rfpDocument.status === "extracting"
                       ? `${rfpDocument.extraction_progress}%`
                       : rfpDocument.status
                     : "not started"
@@ -122,7 +233,7 @@ export function ProjectDetailsPage() {
               />
               <ProcessingStep
                 label="Vendor datasheets parsed"
-                meta={`${vendorDocuments.filter((d) => d.status === "extracted").length} of ${vendorDocuments.length}`}
+                meta={`${vendorDocuments.filter((d) => d.status === "completed").length} of ${vendorDocuments.length}`}
                 done={vendorsExtracted}
                 available
               />

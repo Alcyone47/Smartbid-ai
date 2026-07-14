@@ -38,7 +38,7 @@ export function DocumentRow({ projectId, document }: { projectId: string; docume
           {document.page_count ? `${document.page_count} pages` : document.mime_type}
           {document.error_message ? ` · ${document.error_message}` : ""}
         </div>
-        {document.status === "processing" ? (
+        {document.status === "extracting" || document.status === "retrying" ? (
           <div className="mt-1.5 flex items-center gap-2">
             <div className="h-1 max-w-40 flex-1 overflow-hidden rounded-full bg-slate-100">
               <div
@@ -46,12 +46,14 @@ export function DocumentRow({ projectId, document }: { projectId: string; docume
                 style={{ width: `${document.extraction_progress}%` }}
               />
             </div>
-            <span className="text-[11px] font-semibold text-amber-600">{document.extraction_progress}%</span>
+            <span className="text-[11px] font-semibold text-amber-600">
+              {document.status === "retrying" ? "Retrying…" : `${document.extraction_progress}%`}
+            </span>
           </div>
         ) : null}
       </div>
       <StatusBadge status={document.status} />
-      {document.status === "uploaded" || document.status === "failed" ? (
+      {document.status === "queued" || document.status === "failed" ? (
         <button
           onClick={handleExtract}
           disabled={triggerExtraction.isPending}

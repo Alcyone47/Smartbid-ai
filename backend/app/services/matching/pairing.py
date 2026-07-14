@@ -59,3 +59,22 @@ def best_candidate(
             best_score = score
             best_spec = spec
     return best_spec, best_score
+
+
+def equipment_candidate_score(req_key: str, req_label: str, spec_key: str, spec_label: str) -> float:
+    """0-100 confidence that a vendor equipment group is the same item as an RFP equipment group.
+
+    Exact normalized key match wins outright; otherwise fall back to fuzzy label similarity.
+    """
+    normalized_req_key = normalize_phrase(req_key)
+    normalized_spec_key = normalize_phrase(spec_key)
+    if normalized_req_key and normalized_req_key == normalized_spec_key:
+        return 100.0
+    normalized_req_label = normalize_phrase(req_label)
+    normalized_spec_label = normalize_phrase(spec_label)
+    return float(
+        max(
+            fuzz.token_set_ratio(normalized_req_label, normalized_spec_label),
+            fuzz.token_sort_ratio(normalized_req_label, normalized_spec_label),
+        )
+    )

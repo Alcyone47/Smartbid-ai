@@ -13,6 +13,12 @@ PAIRING_MIN_SIMILARITY = 55.0
 # A label similarity at/above this is treated as a confident parameter match.
 PAIRING_STRONG_SIMILARITY = 80.0
 
+# --- Equipment pairing (which vendor item corresponds to an RFP item) ---
+# Minimum equipment-label similarity (0-100) for a vendor equipment group to be
+# considered the same item as an RFP equipment group. Below this, the RFP item's
+# specs are compared against the whole vendor spec pool as a fallback.
+EQUIPMENT_PAIRING_MIN_SIMILARITY = 60.0
+
 # --- Numeric comparison ---
 # Relative gap (fraction of the expected value) still counted as a partial match
 # when the strict operator check fails, e.g. 0.15 == within 15%.

@@ -12,7 +12,7 @@ export function RequirementsTab({ projectId, rfpDocument }: { projectId: string;
   if (!rfpDocument) {
     return <EmptyState message="Upload an RFP document to extract requirements." />
   }
-  if (rfpDocument.status !== "extracted") {
+  if (rfpDocument.status !== "completed") {
     return <EmptyState message={`RFP is ${rfpDocument.status}. Requirements will appear once extraction completes.`} />
   }
   if (isLoading) {

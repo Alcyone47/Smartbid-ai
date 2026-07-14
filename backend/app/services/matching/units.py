@@ -3,8 +3,12 @@
 Each known unit maps to ``(dimension, factor, offset)`` where the value in the
 dimension's base unit is ``value * factor + offset`` (offset is only non-zero for
 temperature). This lets the numeric matcher compare, e.g., "30 mins" against
-"0.5 hr" or "2 Gbps" against "2000 Mbps". Unknown units return ``None`` so callers
+"0.5 hr" or "2 GB" against "2048 MB". Unknown units return ``None`` so callers
 can fall back rather than guess.
+
+Data-size AND data-rate prefixes (k/M/G/T) are treated as **binary** (1024-based),
+matching hardware/memory/storage convention so that, e.g., 2048 MB == 2 GB and
+2048 Mbps == 2 Gbps compare as exactly equal rather than off by ~2.4%.
 """
 
 from __future__ import annotations
@@ -27,18 +31,18 @@ PERCENTAGE = "percentage"  # percent
 
 # canonical token -> (dimension, factor_to_base, offset_to_base)
 _UNITS: dict[str, tuple[str, float, float]] = {
-    # data rate (base: bit/s)
+    # data rate (base: bit/s) — binary (1024-based) prefixes
     "bps": (DATA_RATE, 1.0, 0.0),
-    "kbps": (DATA_RATE, 1e3, 0.0),
-    "mbps": (DATA_RATE, 1e6, 0.0),
-    "gbps": (DATA_RATE, 1e9, 0.0),
-    "tbps": (DATA_RATE, 1e12, 0.0),
-    # data size (base: byte, decimal)
+    "kbps": (DATA_RATE, 1024.0, 0.0),
+    "mbps": (DATA_RATE, 1024.0**2, 0.0),
+    "gbps": (DATA_RATE, 1024.0**3, 0.0),
+    "tbps": (DATA_RATE, 1024.0**4, 0.0),
+    # data size (base: byte) — binary (1024-based) prefixes, so 2048 MB == 2 GB
     "byte": (DATA_SIZE, 1.0, 0.0),
-    "kb": (DATA_SIZE, 1e3, 0.0),
-    "mb": (DATA_SIZE, 1e6, 0.0),
-    "gb": (DATA_SIZE, 1e9, 0.0),
-    "tb": (DATA_SIZE, 1e12, 0.0),
+    "kb": (DATA_SIZE, 1024.0, 0.0),
+    "mb": (DATA_SIZE, 1024.0**2, 0.0),
+    "gb": (DATA_SIZE, 1024.0**3, 0.0),
+    "tb": (DATA_SIZE, 1024.0**4, 0.0),
     "kib": (DATA_SIZE, 1024.0, 0.0),
     "mib": (DATA_SIZE, 1024.0**2, 0.0),
     "gib": (DATA_SIZE, 1024.0**3, 0.0),

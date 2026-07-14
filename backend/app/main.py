@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import documents, projects
+from app.api import documents, projects, vendors
 from app.api.v1 import extraction, matching, reports
 from app.config import settings
 from app.core.exceptions import AppException
@@ -36,6 +36,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
 app.include_router(projects.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
+app.include_router(vendors.router, prefix="/api")
 app.include_router(extraction.router, prefix="/api/v1")
 app.include_router(matching.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")

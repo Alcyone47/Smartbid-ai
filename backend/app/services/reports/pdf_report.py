@@ -82,18 +82,19 @@ def _vendor_table(summaries: list) -> Table:
 
 def _gaps_table(gaps: list[ReportRow], styles) -> Table:
     cell = ParagraphStyle("GapCell", parent=styles["Normal"], fontSize=8.5, leading=11)
-    data = [["Requirement", "Vendor", "Required", "Offered"]]
+    data = [["Equipment", "Requirement", "Vendor", "Required", "Offered"]]
     for g in gaps:
         required = " ".join(filter(None, [g.operator, g.expected_value, g.unit])) or g.requirement_text
         data.append(
             [
+                Paragraph(_escape(g.equipment_label), cell),
                 Paragraph(_escape(g.requirement_label), cell),
                 Paragraph(_escape(g.vendor_name), cell),
                 Paragraph(_escape(required), cell),
                 Paragraph(_escape(g.vendor_value or "-"), cell),
             ]
         )
-    table = Table(data, hAlign="LEFT", colWidths=[6.5 * cm, 3 * cm, 3.5 * cm, 3.5 * cm])
+    table = Table(data, hAlign="LEFT", colWidths=[3 * cm, 5 * cm, 2.5 * cm, 3 * cm, 3 * cm])
     table.setStyle(
         TableStyle(
             [

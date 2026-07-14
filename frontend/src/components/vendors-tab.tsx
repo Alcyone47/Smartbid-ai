@@ -1,6 +1,11 @@
+import { useMemo, useState } from "react"
+import { FileText, Trash2 } from "lucide-react"
 import { useSpecifications } from "@/hooks/use-extraction"
+import { useVendors } from "@/hooks/use-vendors"
 import { StatusBadge } from "@/components/status-badge"
-import type { Document } from "@/types/api"
+import { DocumentUploadDialog } from "@/components/document-upload-dialog"
+import { DeleteVendorDialog } from "@/components/delete-vendor-dialog"
+import type { Document, Vendor } from "@/types/api"
 
 const LOGO_COLORS = ["#2563EB", "#7C3AED", "#0EA5E9", "#DC2626", "#059669", "#D97706"]
 
@@ -14,42 +19,66 @@ function initials(name: string) {
 }
 
 export function VendorsTab({ projectId, vendorDocuments }: { projectId: string; vendorDocuments: Document[] }) {
-  if (vendorDocuments.length === 0) {
+  const { data: vendors } = useVendors(projectId)
+  const [removingVendor, setRemovingVendor] = useState<Vendor | null>(null)
+
+  const documentsByVendor = useMemo(() => {
+    const map = new Map<string, Document[]>()
+    for (const doc of vendorDocuments) {
+      if (!doc.vendor_id) continue
+      const list = map.get(doc.vendor_id)
+      if (list) list.push(doc)
+      else map.set(doc.vendor_id, [doc])
+    }
+    return map
+  }, [vendorDocuments])
+
+  if (!vendors || vendors.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card py-12 text-center text-sm text-muted-foreground">
-        No vendor datasheets uploaded yet.
+        No vendors yet. Upload a vendor datasheet to get started.
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {vendorDocuments.map((doc, i) => (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {vendors.map((vendor, i) => (
         <VendorCard
-          key={doc.id}
+          key={vendor.id}
           projectId={projectId}
-          document={doc}
+          vendor={vendor}
+          documents={documentsByVendor.get(vendor.id) ?? []}
           logoBg={LOGO_COLORS[i % LOGO_COLORS.length]}
+          onRemove={() => setRemovingVendor(vendor)}
         />
       ))}
+      {removingVendor ? (
+        <DeleteVendorDialog
+          projectId={projectId}
+          vendorId={removingVendor.id}
+          vendorName={removingVendor.name}
+          open={!!removingVendor}
+          onOpenChange={() => setRemovingVendor(null)}
+        />
+      ) : null}
     </div>
   )
 }
 
 function VendorCard({
   projectId,
-  document,
+  vendor,
+  documents,
   logoBg,
+  onRemove,
 }: {
   projectId: string
-  document: Document
+  vendor: Vendor
+  documents: Document[]
   logoBg: string
+  onRemove: () => void
 }) {
-  const { data: specifications } = useSpecifications(
-    projectId,
-    document.status === "extracted" ? document.id : undefined,
-  )
-
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4.5">
       <div className="flex items-center gap-2.5">
@@ -57,18 +86,60 @@ function VendorCard({
           className="flex h-9 w-9 items-center justify-center rounded-lg text-[13px] font-bold text-white"
           style={{ background: logoBg }}
         >
-          {initials(document.vendor_name ?? "?")}
+          {initials(vendor.name)}
         </div>
-        <div>
-          <div className="text-[13.5px] font-bold text-foreground">{document.vendor_name ?? "Unknown vendor"}</div>
-          <div className="text-[11.5px] text-muted-foreground">{document.original_filename}</div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13.5px] font-bold text-foreground">{vendor.name}</div>
+          <div className="text-[11.5px] text-muted-foreground">
+            {documents.length} {documents.length === 1 ? "file" : "files"}
+          </div>
         </div>
+        <button
+          onClick={onRemove}
+          title="Remove vendor"
+          className="shrink-0 text-slate-300 hover:text-destructive"
+        >
+          <Trash2 size={15} />
+        </button>
       </div>
-      <div className="flex items-center justify-between">
-        <StatusBadge status={document.status} />
-        <span className="text-[12px] font-medium text-slate-500">
-          {specifications ? `${specifications.length} specs extracted` : "—"}
+
+      <div className="flex flex-col gap-1.5">
+        {documents.length === 0 ? (
+          <div className="text-[12px] text-muted-foreground">No files uploaded yet.</div>
+        ) : (
+          documents.map((doc) => <VendorDocumentRow key={doc.id} projectId={projectId} document={doc} />)
+        )}
+      </div>
+
+      <div className="mt-0.5 border-t border-slate-100 pt-2.5">
+        <DocumentUploadDialog
+          projectId={projectId}
+          docType="vendor_proposal"
+          triggerLabel="Add file"
+          presetVendorName={vendor.name}
+        />
+      </div>
+    </div>
+  )
+}
+
+function VendorDocumentRow({ projectId, document }: { projectId: string; document: Document }) {
+  const { data: specifications } = useSpecifications(
+    projectId,
+    document.status === "completed" ? document.id : undefined,
+  )
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg bg-background px-2.5 py-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <FileText size={13} className="shrink-0 text-muted-foreground" />
+        <span className="truncate text-[12px] text-slate-700">{document.original_filename}</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-[11px] font-medium text-slate-500">
+          {specifications ? `${specifications.length} specs` : "—"}
         </span>
+        <StatusBadge status={document.status} />
       </div>
     </div>
   )

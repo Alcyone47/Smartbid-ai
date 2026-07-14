@@ -1,21 +1,42 @@
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Search, ChevronLeft, ChevronRight, X, RefreshCw } from "lucide-react"
+import { Search, ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightSmall, RefreshCw, X } from "lucide-react"
 import { useComplianceMatrix, useTriggerMatching } from "@/hooks/use-matching"
 import { StatusBadge } from "@/components/status-badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import type { ComplianceMatrixEntry, Document } from "@/types/api"
+import type { Document, EquipmentComplianceGroup, EquipmentSpecComparison } from "@/types/api"
 
 const PAGE_SIZE = 8
+
+const SELECT_CLASS =
+  "rounded-lg border border-border bg-card px-2.5 py-1.75 text-[12.5px] text-slate-700"
+
+type ComplianceFilter = "all" | "match" | "partial" | "unmet"
 
 function complianceColor(pct: number) {
   return pct >= 85 ? "#059669" : pct >= 60 ? "#D97706" : "#DC2626"
 }
 
-function scorePercent(entry: ComplianceMatrixEntry) {
-  return Math.round(Number(entry.match_score ?? 0) * 100)
+// An equipment's overall outcome: fully met (all specs matched), unmet (nothing
+// matched or partially credited), or partial (anything in between).
+function overallStatus(group: EquipmentComplianceGroup): Exclude<ComplianceFilter, "all"> {
+  if (group.total_specs > 0 && group.matched === group.total_specs) return "match"
+  if (group.matched === 0 && group.partial === 0) return "unmet"
+  return "partial"
+}
+
+function specScorePercent(spec: EquipmentSpecComparison) {
+  return Math.round(Number(spec.match_score ?? 0) * 100)
+}
+
+function groupKey(group: EquipmentComplianceGroup) {
+  return `${group.vendor_id}:${group.equipment_key}`
+}
+
+function expectedText(spec: EquipmentSpecComparison) {
+  const parts = [spec.operator, spec.expected_value, spec.unit].filter(Boolean)
+  return parts.length > 0 ? parts.join(" ") : "—"
 }
 
 export function ComplianceMatrixTab({
@@ -25,31 +46,51 @@ export function ComplianceMatrixTab({
   projectId: string
   vendorDocuments: Document[]
 }) {
-  const { data: entries, isLoading } = useComplianceMatrix(projectId)
+  const { data: groups, isLoading } = useComplianceMatrix(projectId)
   const triggerMatching = useTriggerMatching(projectId)
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
   const [vendorFilter, setVendorFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<ComplianceFilter>("all")
   const [page, setPage] = useState(1)
-  const [selectedEntry, setSelectedEntry] = useState<ComplianceMatrixEntry | null>(null)
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [isRunningAll, setIsRunningAll] = useState(false)
 
-  const matchableDocuments = vendorDocuments.filter((d) => d.status === "extracted")
+  // A vendor is matchable once at least one of its PDFs has finished extraction.
+  const matchableVendorIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          vendorDocuments
+            .filter((d) => d.status === "completed" && d.vendor_id)
+            .map((d) => d.vendor_id as string),
+        ),
+      ),
+    [vendorDocuments],
+  )
 
   const vendorNames = useMemo(
-    () => Array.from(new Set((entries ?? []).map((e) => e.vendor_name))).sort(),
-    [entries],
+    () => Array.from(new Set((groups ?? []).map((g) => g.vendor_name))).sort(),
+    [groups],
   )
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return (entries ?? []).filter((e) => {
-      const matchesQ = !q || e.requirement_text.toLowerCase().includes(q)
-      const matchesS = statusFilter === "all" || e.status === statusFilter
-      const matchesV = vendorFilter === "all" || e.vendor_name === vendorFilter
-      return matchesQ && matchesS && matchesV
+    return (groups ?? []).filter((g) => {
+      const matchesQ = !q || g.equipment_label.toLowerCase().includes(q)
+      const matchesV = vendorFilter === "all" || g.vendor_name === vendorFilter
+      const matchesStatus = statusFilter === "all" || overallStatus(g) === statusFilter
+      return matchesQ && matchesV && matchesStatus
     })
-  }, [entries, search, statusFilter, vendorFilter])
+  }, [groups, search, vendorFilter, statusFilter])
+
+  const filtersActive = search !== "" || vendorFilter !== "all" || statusFilter !== "all"
+
+  const clearFilters = () => {
+    setSearch("")
+    setVendorFilter("all")
+    setStatusFilter("all")
+    setPage(1)
+  }
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
@@ -57,14 +98,14 @@ export function ComplianceMatrixTab({
   const paged = filtered.slice(start, start + PAGE_SIZE)
 
   const handleRunMatching = async () => {
-    if (matchableDocuments.length === 0) {
+    if (matchableVendorIds.length === 0) {
       toast.error("No vendor datasheets have finished extraction yet.")
       return
     }
     setIsRunningAll(true)
     try {
-      for (const doc of matchableDocuments) {
-        await triggerMatching.mutateAsync(doc.id)
+      for (const vendorId of matchableVendorIds) {
+        await triggerMatching.mutateAsync(vendorId)
       }
       toast.success("Matching complete")
     } catch (error) {
@@ -74,15 +115,15 @@ export function ComplianceMatrixTab({
     }
   }
 
-  if (!isLoading && (entries ?? []).length === 0) {
+  if (!isLoading && (groups ?? []).length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card py-12 text-center">
         <p className="mb-4 text-sm text-muted-foreground">
-          {matchableDocuments.length === 0
+          {matchableVendorIds.length === 0
             ? "Upload and extract an RFP and at least one vendor datasheet, then run matching."
             : "No matching results yet."}
         </p>
-        <Button onClick={handleRunMatching} disabled={isRunningAll || matchableDocuments.length === 0}>
+        <Button onClick={handleRunMatching} disabled={isRunningAll || matchableVendorIds.length === 0}>
           <RefreshCw size={14} className={isRunningAll ? "animate-spin" : ""} />
           {isRunningAll ? "Running…" : "Run matching"}
         </Button>
@@ -101,32 +142,17 @@ export function ComplianceMatrixTab({
               setSearch(e.target.value)
               setPage(1)
             }}
-            placeholder="Search requirements…"
+            placeholder="Search equipment…"
             className="h-8.5 bg-background pl-8 text-[13px]"
           />
         </div>
-        {["all", "match", "partial", "no_match"].map((s) => (
-          <button
-            key={s}
-            onClick={() => {
-              setStatusFilter(s)
-              setPage(1)
-            }}
-            className={cn(
-              "rounded-lg border px-3 py-1.75 text-[12.5px] font-semibold whitespace-nowrap",
-              statusFilter === s ? "border-primary bg-secondary text-primary" : "border-border bg-card text-slate-700",
-            )}
-          >
-            {s === "all" ? "All" : s === "no_match" ? "No Match" : s.charAt(0).toUpperCase() + s.slice(1)}
-          </button>
-        ))}
         <select
           value={vendorFilter}
           onChange={(e) => {
             setVendorFilter(e.target.value)
             setPage(1)
           }}
-          className="rounded-lg border border-border bg-card px-2.5 py-1.75 text-[12.5px] text-slate-700"
+          className={SELECT_CLASS}
         >
           <option value="all">All vendors</option>
           {vendorNames.map((v) => (
@@ -135,11 +161,33 @@ export function ComplianceMatrixTab({
             </option>
           ))}
         </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as ComplianceFilter)
+            setPage(1)
+          }}
+          className={SELECT_CLASS}
+        >
+          <option value="all">All compliance</option>
+          <option value="match">Match</option>
+          <option value="partial">Partial match</option>
+          <option value="unmet">Unmet</option>
+        </select>
+        {filtersActive ? (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1 rounded-lg px-2 py-1.75 text-[12.5px] font-semibold text-slate-500 hover:bg-background hover:text-slate-700"
+          >
+            <X size={13} />
+            Clear
+          </button>
+        ) : null}
         <Button
           variant="outline"
           className="ml-auto h-8.5 text-[12.5px]"
           onClick={handleRunMatching}
-          disabled={isRunningAll || matchableDocuments.length === 0}
+          disabled={isRunningAll || matchableVendorIds.length === 0}
         >
           <RefreshCw size={13} className={isRunningAll ? "animate-spin" : ""} />
           {isRunningAll ? "Running…" : "Re-run matching"}
@@ -151,16 +199,13 @@ export function ComplianceMatrixTab({
           <thead>
             <tr className="bg-background">
               <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
-                Requirement
+                Equipment
               </th>
               <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
                 Vendor
               </th>
               <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
-                Vendor Value
-              </th>
-              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
-                Match
+                Specs
               </th>
               <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
                 Compliance
@@ -168,35 +213,115 @@ export function ComplianceMatrixTab({
             </tr>
           </thead>
           <tbody>
-            {paged.map((entry) => (
-              <tr
-                key={entry.id}
-                onClick={() => setSelectedEntry(entry)}
-                className="cursor-pointer border-t border-slate-100 hover:bg-background"
-              >
-                <td className="max-w-70 px-5 py-3 text-[13px] font-medium text-foreground">
-                  {entry.requirement_text}
-                </td>
-                <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">{entry.vendor_name}</td>
-                <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">
-                  {entry.vendor_value ?? "—"}
-                </td>
-                <td className="px-3 py-3">
-                  <StatusBadge status={entry.status} />
-                </td>
-                <td className="px-3 py-3">
-                  <div className="flex min-w-25 items-center gap-2">
-                    <div className="h-1.5 max-w-17.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${scorePercent(entry)}%`, background: complianceColor(scorePercent(entry)) }}
-                      />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-700">{scorePercent(entry)}%</span>
-                  </div>
+            {paged.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-5 py-10 text-center text-[13px] text-muted-foreground">
+                  No equipment match the current filters.{" "}
+                  <button onClick={clearFilters} className="font-semibold text-primary hover:underline">
+                    Clear filters
+                  </button>
                 </td>
               </tr>
-            ))}
+            ) : null}
+            {paged.map((group) => {
+              const key = groupKey(group)
+              const isExpanded = expandedKey === key
+              return (
+                <Fragment key={key}>
+                  <tr
+                    onClick={() => setExpandedKey(isExpanded ? null : key)}
+                    className="cursor-pointer border-t border-slate-100 hover:bg-background"
+                  >
+                    <td className="px-5 py-3 text-[13px] font-medium text-foreground">
+                      <div className="flex items-center gap-1.5">
+                        {isExpanded ? (
+                          <ChevronDown size={15} className="text-muted-foreground" />
+                        ) : (
+                          <ChevronRightSmall size={15} className="text-muted-foreground" />
+                        )}
+                        {group.equipment_label}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">{group.vendor_name}</td>
+                    <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">
+                      <span className="font-semibold text-emerald-600">{group.matched}</span>
+                      {group.partial > 0 ? <span className="text-amber-600"> · {group.partial} partial</span> : null}
+                      <span className="text-muted-foreground"> / {group.total_specs} specs</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex min-w-25 items-center gap-2">
+                        <div className="h-1.5 max-w-17.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${group.compliance_pct}%`,
+                              background: complianceColor(group.compliance_pct),
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700">{group.compliance_pct}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded ? (
+                    <tr className="border-t border-slate-100 bg-background">
+                      <td colSpan={4} className="px-5 py-3">
+                        <div className="overflow-x-auto rounded-lg border border-slate-100 bg-card">
+                          <table className="w-full min-w-[700px] border-collapse">
+                            <thead>
+                              <tr className="bg-background">
+                                <th className="px-4 py-2 text-left text-[10.5px] font-semibold text-muted-foreground uppercase">
+                                  Required Spec
+                                </th>
+                                <th className="px-3 py-2 text-left text-[10.5px] font-semibold text-muted-foreground uppercase">
+                                  Required Value
+                                </th>
+                                <th className="px-3 py-2 text-left text-[10.5px] font-semibold text-muted-foreground uppercase">
+                                  Vendor Value
+                                </th>
+                                <th className="px-3 py-2 text-left text-[10.5px] font-semibold text-muted-foreground uppercase">
+                                  Status
+                                </th>
+                                <th className="px-3 py-2 text-left text-[10.5px] font-semibold text-muted-foreground uppercase">
+                                  Score
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {group.specs.map((spec) => (
+                                <tr key={spec.id} className="border-t border-slate-100">
+                                  <td className="px-4 py-2.5 text-[12.5px] font-medium text-foreground">
+                                    {spec.requirement_label}
+                                    {spec.is_mandatory ? (
+                                      <span className="ml-1.5 text-[10px] font-semibold text-red-500">MANDATORY</span>
+                                    ) : null}
+                                    <div className="mt-0.5 text-[11.5px] font-normal text-muted-foreground">
+                                      {spec.rationale}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-[12.5px] whitespace-nowrap text-slate-700">
+                                    {expectedText(spec)}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-[12.5px] whitespace-nowrap text-slate-700">
+                                    {spec.vendor_value ?? "—"}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <StatusBadge status={spec.status} />
+                                  </td>
+                                  <td className="px-3 py-2.5 text-[12.5px] font-semibold text-slate-700">
+                                    {specScorePercent(spec)}%
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -204,7 +329,7 @@ export function ComplianceMatrixTab({
       <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
         <span className="text-[12.5px] text-muted-foreground">
           Showing {filtered.length === 0 ? 0 : start + 1}–{Math.min(start + PAGE_SIZE, filtered.length)} of{" "}
-          {filtered.length} matches
+          {filtered.length} equipment
         </span>
         <div className="flex items-center gap-1.5">
           <button
@@ -224,55 +349,6 @@ export function ComplianceMatrixTab({
           </button>
         </div>
       </div>
-
-      {selectedEntry ? (
-        <>
-          <div onClick={() => setSelectedEntry(null)} className="fixed inset-0 z-40 bg-slate-900/35" />
-          <div className="fixed top-0 right-0 z-50 flex h-screen w-110 flex-col bg-card shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5.5 py-4.5">
-              <span className="text-[15px] font-bold text-foreground">Requirement Detail</span>
-              <X size={18} className="cursor-pointer text-muted-foreground" onClick={() => setSelectedEntry(null)} />
-            </div>
-            <div className="flex-1 overflow-y-auto p-5.5">
-              <div className="mb-5 text-[14.5px] leading-relaxed font-semibold text-foreground">
-                {selectedEntry.requirement_text}
-              </div>
-              <div className="mb-5 flex gap-5">
-                <StatusBadge status={selectedEntry.status} />
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground">{scorePercent(selectedEntry)}%</span>
-                  <span className="text-xs text-muted-foreground">match score</span>
-                </div>
-              </div>
-              <div className="mb-4 rounded-lg bg-background p-3.5">
-                <div className="mb-2 text-[11px] font-semibold text-muted-foreground uppercase">
-                  Vendor Specification — {selectedEntry.vendor_name}
-                </div>
-                <div className="mb-1 text-[13.5px] font-medium text-foreground">
-                  {selectedEntry.vendor_value ?? "Not specified"}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Expected: {selectedEntry.operator ?? ""} {selectedEntry.expected_value ?? "—"}{" "}
-                  {selectedEntry.unit ?? ""}
-                </div>
-              </div>
-              <div className="mb-4">
-                <div className="mb-2 text-[11px] font-semibold text-muted-foreground uppercase">
-                  Matching Explanation
-                </div>
-                <p className="text-[13px] leading-relaxed text-slate-700">{selectedEntry.rationale}</p>
-              </div>
-              {selectedEntry.source_page ? (
-                <div className="flex items-center gap-3 rounded-lg border border-slate-100 p-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[11.5px] text-muted-foreground">Page {selectedEntry.source_page}</div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </>
-      ) : null}
     </div>
   )
 }

@@ -39,6 +39,21 @@ class LLMProviderError(AppException):
     error_code = "LLM_PROVIDER_ERROR"
 
 
+class LLMRateLimitError(AppException):
+    """Transient: the LLM provider returned HTTP 429 and in-call retries were exhausted.
+
+    Carries the server-suggested wait (retryDelay/Retry-After) so the caller — the
+    Celery task — can re-queue the job after that delay instead of failing it.
+    """
+
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    error_code = "LLM_RATE_LIMITED"
+
+    def __init__(self, message: str = "LLM provider rate limit exceeded", retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 class ExtractionValidationError(AppException):
     status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     error_code = "EXTRACTION_VALIDATION_FAILED"

@@ -18,6 +18,8 @@ class ExtractedRequirement(Base):
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=False)
     document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    equipment_key: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'general'"), index=True)
+    equipment_label: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'General'"))
     requirement_key: Mapped[str] = mapped_column(String, nullable=False)
     requirement_label: Mapped[str] = mapped_column(String, nullable=False)
     category: Mapped[str | None] = mapped_column(String)
@@ -41,6 +43,11 @@ class ExtractedSpecification(Base):
     document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     vendor_name: Mapped[str] = mapped_column(String, nullable=False)
+    vendor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vendors.id", ondelete="CASCADE"), index=True
+    )
+    equipment_key: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'general'"), index=True)
+    equipment_label: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'General'"))
     spec_key: Mapped[str] = mapped_column(String, nullable=False)
     spec_label: Mapped[str] = mapped_column(String, nullable=False)
     spec_text: Mapped[str] = mapped_column(String, nullable=False)

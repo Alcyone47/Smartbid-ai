@@ -13,6 +13,7 @@ class DocumentRead(BaseModel):
     project_id: uuid.UUID
     doc_type: str
     vendor_name: str | None
+    vendor_id: uuid.UUID | None
     storage_path: str
     original_filename: str
     mime_type: str

@@ -8,16 +8,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.session import Base
 
 
-class Project(Base):
-    __tablename__ = "projects"
+class Vendor(Base):
+    """A vendor being evaluated within a project. Owns one or more uploaded
+    proposal documents (PDFs) whose extracted specifications are matched together.
+    """
+
+    __tablename__ = "vendors"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
-    client_name: Mapped[str | None] = mapped_column(String)
-    status: Mapped[str] = mapped_column(String, nullable=False, server_default="draft")
-    # When set, this manual value overrides the auto-derived status (null = auto).
-    status_override: Mapped[str | None] = mapped_column(String)
-    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
-    updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))

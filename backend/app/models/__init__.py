@@ -3,6 +3,7 @@ from app.models.document import Document
 from app.models.extraction import ExtractedRequirement, ExtractedSpecification
 from app.models.org import Org, OrgMember
 from app.models.project import Project
+from app.models.vendor import Vendor
 
 __all__ = [
     "ComplianceMatrixEntry",
@@ -12,4 +13,5 @@ __all__ = [
     "Org",
     "OrgMember",
     "Project",
+    "Vendor",
 ]

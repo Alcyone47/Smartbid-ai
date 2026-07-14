@@ -13,6 +13,8 @@ from typing import Iterable, Sequence
 
 @dataclass(frozen=True)
 class ReportRow:
+    equipment_key: str
+    equipment_label: str
     requirement_label: str
     requirement_text: str
     category: str | None
@@ -43,6 +45,8 @@ def build_report_rows(rows: Iterable[Sequence]) -> list[ReportRow]:
             source_page = specification.source_page
         report_rows.append(
             ReportRow(
+                equipment_key=requirement.equipment_key,
+                equipment_label=requirement.equipment_label,
                 requirement_label=requirement.requirement_label,
                 requirement_text=requirement.requirement_text,
                 category=requirement.category,
@@ -58,6 +62,8 @@ def build_report_rows(rows: Iterable[Sequence]) -> list[ReportRow]:
                 source_page=source_page,
             )
         )
+    # Group rows so each vendor's equipment items are contiguous in the reports.
+    report_rows.sort(key=lambda r: (r.vendor_name, r.equipment_label, r.requirement_label))
     return report_rows
 
 

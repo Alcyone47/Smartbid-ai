@@ -1,11 +1,20 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
-import { Search, Calendar } from "lucide-react"
+import { Search, Calendar, MoreVertical, Pencil, Trash2 } from "lucide-react"
 import { useProjects } from "@/hooks/use-projects"
 import { StatusBadge } from "@/components/status-badge"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
+import { EditProjectDialog } from "@/components/edit-project-dialog"
+import { DeleteProjectDialog } from "@/components/delete-project-dialog"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import type { Project } from "@/types/api"
 
 const STATUS_FILTERS = ["all", "draft", "in_progress", "in_review", "completed"]
 
@@ -14,6 +23,8 @@ export function ProjectsPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [editing, setEditing] = useState<Project | null>(null)
+  const [deleting, setDeleting] = useState<Project | null>(null)
 
   const filtered = useMemo(() => {
     return (projects ?? []).filter((p) => {
@@ -76,7 +87,29 @@ export function ProjectsPage() {
                   <div className="text-[15px] leading-tight font-bold tracking-tight text-foreground">{p.name}</div>
                   <div className="mt-0.5 text-[12.5px] text-muted-foreground">{p.client_name ?? "No client set"}</div>
                 </div>
-                <StatusBadge status={p.status} />
+                <div className="flex items-center gap-1.5">
+                  <StatusBadge status={p.status} />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        aria-label="Project actions"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => setEditing(p)}>
+                        <Pencil size={14} />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(p)}>
+                        <Trash2 size={14} />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
               <div className="flex items-center gap-1.5 text-[12.5px] font-medium text-slate-700">
                 <Calendar size={14} className="text-muted-foreground" />
@@ -96,6 +129,13 @@ export function ProjectsPage() {
           ))}
         </div>
       )}
+
+      {editing ? (
+        <EditProjectDialog project={editing} open={!!editing} onOpenChange={() => setEditing(null)} />
+      ) : null}
+      {deleting ? (
+        <DeleteProjectDialog project={deleting} open={!!deleting} onOpenChange={() => setDeleting(null)} />
+      ) : null}
     </div>
   )
 }

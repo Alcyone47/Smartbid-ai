@@ -34,8 +34,9 @@ def _service(pages: list[str]) -> ExtractionService:
     )
 
 
-# Three 20k-char pages vs the 24k-char batch budget -> three separate batches.
-_THREE_BATCH_PAGES = ["A" * 20000, "B" * 20000, "C" * 20000]
+# Three 25k-char pages vs the 48k-char batch budget -> two pages can't share a batch,
+# so this yields three separate batches (one progress report each).
+_THREE_BATCH_PAGES = ["A" * 25000, "B" * 25000, "C" * 25000]
 
 
 @pytest.mark.asyncio

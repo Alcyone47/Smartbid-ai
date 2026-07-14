@@ -1,25 +1,51 @@
+import logging
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, TypeVar
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.config import settings
-from app.core.exceptions import ExtractionValidationError
 from app.core.llm.base import LLMProvider
 from app.schemas.extraction import (
     REQUIREMENT_EXTRACTION_JSON_SCHEMA,
     SPECIFICATION_EXTRACTION_JSON_SCHEMA,
+    RequirementExtractionItem,
     RequirementExtractionResult,
+    SpecificationExtractionItem,
     SpecificationExtractionResult,
 )
 from app.services.parsing.document_parser import DocumentParser, ParsedDocument
 from app.services.parsing.text_cleaner import TextCleaner
 
+logger = logging.getLogger(__name__)
+
 # Called after each extraction batch with (completed_batches, total_batches).
 ProgressCallback = Callable[[int, int], Awaitable[None]]
 
+_ItemT = TypeVar("_ItemT", bound=BaseModel)
+
+
+def _parse_batch_items(data: object, key: str, model: type[_ItemT]) -> tuple[list[_ItemT], int]:
+    """Validate a batch's items individually, keeping the valid ones and counting the
+    rest. A single malformed item (e.g. Gemini omitting a required field on one entry
+    of a large batch) must not discard the whole document's extraction."""
+    raw_list = data.get(key, []) if isinstance(data, dict) else []
+    if not isinstance(raw_list, list):
+        return [], 0
+    items: list[_ItemT] = []
+    skipped = 0
+    for raw in raw_list:
+        try:
+            items.append(model.model_validate(raw))
+        except ValidationError:
+            skipped += 1
+    return items, skipped
+
 REQUIREMENT_SYSTEM_PROMPT = """You are extracting structured technical requirements from an RFP (Request for Proposal) document.
+An RFP usually asks for one or more distinct pieces of equipment/items (e.g. a network switch, a UPS, a server). Assign every requirement to the equipment/item it belongs to.
 For every distinct requirement, produce one item with:
+- equipment_key: a short stable slug (snake_case) identifying the equipment/item this requirement belongs to (e.g. "core_switch", "ups_unit"). If the document describes a single product or no grouping is apparent, use "general".
+- equipment_label: a short human-readable name for that equipment/item (e.g. "Core Switch", "UPS Unit"). Use "General" when equipment_key is "general".
 - requirement_key: a short stable slug (snake_case)
 - requirement_label: a short human-readable name
 - category: a grouping label if apparent (e.g. "Power", "Networking"), else null
@@ -31,7 +57,10 @@ For every distinct requirement, produce one item with:
 Do not compare, score, or judge requirements. Only extract what is stated."""
 
 SPECIFICATION_SYSTEM_PROMPT = """You are extracting structured technical specifications from a vendor's proposal/datasheet document.
+A vendor document usually describes one or more distinct pieces of equipment/items (e.g. a network switch, a UPS, a server). Assign every specification to the equipment/item it belongs to.
 For every distinct specification, produce one item with:
+- equipment_key: a short stable slug (snake_case) identifying the equipment/item this specification belongs to (e.g. "core_switch", "ups_unit"). Use the same naming convention you would for an RFP so equipment can be matched later. If the document describes a single product or no grouping is apparent, use "general".
+- equipment_label: a short human-readable name for that equipment/item (e.g. "Core Switch", "UPS Unit"). Use "General" when equipment_key is "general".
 - spec_key: a short stable slug (snake_case)
 - spec_label: a short human-readable name
 - spec_text: the specification as stated in the document
@@ -59,17 +88,24 @@ def _segment_pages(pages: list[str], max_chars: int) -> list[PageSegment]:
     return segments
 
 
-def _batch_segments(segments: list[PageSegment], max_chars: int) -> list[list[PageSegment]]:
-    """Greedily pack page segments into batches whose combined length stays under max_chars."""
+def _batch_segments(segments: list[PageSegment], max_chars: int, max_pages: int) -> list[list[PageSegment]]:
+    """Group consecutive page segments into batches of up to ``max_pages`` distinct
+    pages, kept under ``max_chars``. Whichever limit is hit first closes the batch, so
+    a batch is a 5–10 page group rather than a single page (fewer LLM calls)."""
     batches: list[list[PageSegment]] = []
     current: list[PageSegment] = []
     current_len = 0
+    current_pages: set[int] = set()
     for page_number, text in segments:
-        if current and current_len + len(text) > max_chars:
+        adds_new_page = page_number not in current_pages
+        over_chars = current_len + len(text) > max_chars
+        over_pages = adds_new_page and len(current_pages) >= max_pages
+        if current and (over_chars or over_pages):
             batches.append(current)
-            current, current_len = [], 0
+            current, current_len, current_pages = [], 0, set()
         current.append((page_number, text))
         current_len += len(text)
+        current_pages.add(page_number)
     if current:
         batches.append(current)
     return batches
@@ -79,10 +115,11 @@ def _build_paginated_text(segments: list[PageSegment]) -> str:
     return "\n\n".join(f"--- page {page_number} ---\n{text}" for page_number, text in segments)
 
 
-def _batch_document(pages: list[str], max_chars: int) -> list[str]:
-    """Turn parsed pages into a list of paginated-text blocks, each small enough for a single LLM call."""
+def _batch_document(pages: list[str], max_chars: int, max_pages: int) -> list[str]:
+    """Turn parsed pages into a list of paginated-text blocks, each a group of up to
+    ``max_pages`` pages under ``max_chars`` — a single LLM call per block."""
     segments = _segment_pages(pages, max_chars)
-    batches = _batch_segments(segments, max_chars)
+    batches = _batch_segments(segments, max_chars, max_pages)
     return [_build_paginated_text(batch) for batch in batches] or [""]
 
 
@@ -127,7 +164,7 @@ class ExtractionService:
         self, content: bytes, mime_type: str, progress_callback: ProgressCallback | None = None
     ) -> RequirementExtractionOutcome:
         parsed = self._parse_and_clean(content, mime_type)
-        batches = _batch_document(parsed.pages, settings.extraction_max_chars_per_batch)
+        batches = _batch_document(parsed.pages, settings.extraction_max_chars_per_batch, settings.extraction_pages_per_batch)
 
         requirements: list = []
         raw_responses: list[dict] = []
@@ -139,13 +176,12 @@ class ExtractionService:
                 json_schema=REQUIREMENT_EXTRACTION_JSON_SCHEMA,
                 schema_name="extract_requirements",
             )
-            try:
-                batch_result = RequirementExtractionResult.model_validate(llm_result.data)
-            except ValidationError as exc:
-                raise ExtractionValidationError(
-                    f"Requirement extraction output failed validation: {exc}"
-                ) from exc
-            requirements.extend(batch_result.requirements)
+            batch_items, skipped = _parse_batch_items(
+                llm_result.data, "requirements", RequirementExtractionItem
+            )
+            if skipped:
+                logger.warning("Skipped %d malformed requirement item(s) in batch %d", skipped, index + 1)
+            requirements.extend(batch_items)
             raw_responses.append(llm_result.raw_response)
             await _report_progress(progress_callback, index + 1, len(batches))
 
@@ -159,7 +195,7 @@ class ExtractionService:
         self, content: bytes, mime_type: str, progress_callback: ProgressCallback | None = None
     ) -> SpecificationExtractionOutcome:
         parsed = self._parse_and_clean(content, mime_type)
-        batches = _batch_document(parsed.pages, settings.extraction_max_chars_per_batch)
+        batches = _batch_document(parsed.pages, settings.extraction_max_chars_per_batch, settings.extraction_pages_per_batch)
 
         specifications: list = []
         raw_responses: list[dict] = []
@@ -171,13 +207,12 @@ class ExtractionService:
                 json_schema=SPECIFICATION_EXTRACTION_JSON_SCHEMA,
                 schema_name="extract_specifications",
             )
-            try:
-                batch_result = SpecificationExtractionResult.model_validate(llm_result.data)
-            except ValidationError as exc:
-                raise ExtractionValidationError(
-                    f"Specification extraction output failed validation: {exc}"
-                ) from exc
-            specifications.extend(batch_result.specifications)
+            batch_items, skipped = _parse_batch_items(
+                llm_result.data, "specifications", SpecificationExtractionItem
+            )
+            if skipped:
+                logger.warning("Skipped %d malformed specification item(s) in batch %d", skipped, index + 1)
+            specifications.extend(batch_items)
             raw_responses.append(llm_result.raw_response)
             await _report_progress(progress_callback, index + 1, len(batches))
 

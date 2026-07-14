@@ -27,7 +27,7 @@ async def trigger_extraction(
     document_repo = DocumentRepository(db)
     document = await document_repo.get_by_id(document_id, current_user.org_id)
 
-    await document_repo.update_status(document, status="processing", progress=0)
+    await document_repo.update_status(document, status="queued", progress=0)
     process_document.delay(str(document.id))
     return document
 

@@ -22,7 +22,8 @@ _STATUS_FILL = {
     "partial": PatternFill("solid", fgColor="FFEB9C"),
     "no_match": PatternFill("solid", fgColor="FFC7CE"),
 }
-_MATRIX_WIDTHS = [28, 44, 16, 11, 12, 10, 10, 18, 26, 12, 13, 50, 12]
+_MATRIX_WIDTHS = [22, 28, 44, 16, 11, 12, 10, 10, 18, 26, 12, 13, 50, 12]
+_STATUS_COL = _HEADER.index("Status") + 1
 
 
 def generate_matrix_xlsx(project: Any, rows: list[ReportRow], summaries: list) -> bytes:
@@ -73,6 +74,7 @@ def _build_matrix_sheet(ws: Worksheet, rows: list[ReportRow]) -> None:
 
     for r, row in enumerate(rows, start=2):
         values = [
+            row.equipment_label,
             row.requirement_label,
             row.requirement_text,
             row.category or "",
@@ -89,7 +91,7 @@ def _build_matrix_sheet(ws: Worksheet, rows: list[ReportRow]) -> None:
         ]
         for col, value in enumerate(values, start=1):
             ws.cell(row=r, column=col, value=value)
-        status_cell = ws.cell(row=r, column=10)
+        status_cell = ws.cell(row=r, column=_STATUS_COL)
         fill = _STATUS_FILL.get(row.status)
         if fill:
             status_cell.fill = fill

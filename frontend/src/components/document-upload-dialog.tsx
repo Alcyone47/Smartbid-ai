@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { Upload } from "lucide-react"
 import { useUploadDocument } from "@/hooks/use-documents"
+import { useVendors } from "@/hooks/use-vendors"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,33 +13,52 @@ export function DocumentUploadDialog({
   projectId,
   docType,
   triggerLabel,
+  presetVendorName,
 }: {
   projectId: string
   docType: DocType
   triggerLabel: string
+  // When set (adding files to an existing vendor), the vendor field is locked.
+  presetVendorName?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [vendorName, setVendorName] = useState("")
+  const [vendorName, setVendorName] = useState(presetVendorName ?? "")
+  const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const uploadDocument = useUploadDocument(projectId)
+  const { data: vendors } = useVendors(projectId)
+
+  const isVendor = docType === "vendor_proposal"
+  const lockedVendor = isVendor && !!presetVendorName
+
+  const reset = () => {
+    setVendorName(presetVendorName ?? "")
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
 
   const handleSubmit = async () => {
-    const file = fileInputRef.current?.files?.[0]
-    if (!file) {
-      toast.error("Choose a file to upload")
+    const files = Array.from(fileInputRef.current?.files ?? [])
+    if (files.length === 0) {
+      toast.error("Choose at least one file to upload")
       return
     }
-    if (docType === "vendor_proposal" && !vendorName.trim()) {
+    const name = (presetVendorName ?? vendorName).trim()
+    if (isVendor && !name) {
       toast.error("Vendor name is required")
       return
     }
+    setUploading(true)
     try {
-      await uploadDocument.mutateAsync({ file, docType, vendorName: vendorName || undefined })
+      for (const file of files) {
+        await uploadDocument.mutateAsync({ file, docType, vendorName: name || undefined })
+      }
+      toast.success(files.length > 1 ? `${files.length} files uploaded` : "File uploaded")
       setOpen(false)
-      setVendorName("")
-      if (fileInputRef.current) fileInputRef.current.value = ""
+      reset()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload failed")
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -52,7 +72,7 @@ export function DocumentUploadDialog({
           <DialogTitle>{triggerLabel}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          {docType === "vendor_proposal" ? (
+          {isVendor ? (
             <div>
               <Label htmlFor="vendorName" className="mb-1.5">
                 Vendor name
@@ -62,20 +82,29 @@ export function DocumentUploadDialog({
                 value={vendorName}
                 onChange={(e) => setVendorName(e.target.value)}
                 placeholder="Nexbridge Networks"
+                list="vendor-name-options"
+                disabled={lockedVendor}
               />
+              {!lockedVendor ? (
+                <datalist id="vendor-name-options">
+                  {(vendors ?? []).map((v) => (
+                    <option key={v.id} value={v.name} />
+                  ))}
+                </datalist>
+              ) : null}
             </div>
           ) : null}
           <div>
             <Label htmlFor="file" className="mb-1.5">
-              File
+              {isVendor ? "Files (you can select multiple PDFs)" : "File"}
             </Label>
-            <Input id="file" type="file" ref={fileInputRef} accept=".pdf,.docx" />
+            <Input id="file" type="file" ref={fileInputRef} accept=".pdf,.docx" multiple={isVendor} />
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={handleSubmit} disabled={uploadDocument.isPending}>
+          <Button onClick={handleSubmit} disabled={uploading}>
             <Upload size={14} />
-            {uploadDocument.isPending ? "Uploading…" : "Upload"}
+            {uploading ? "Uploading…" : "Upload"}
           </Button>
         </DialogFooter>
       </DialogContent>
