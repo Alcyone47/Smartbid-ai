@@ -11,7 +11,7 @@ from typing import NamedTuple
 from rapidfuzz import fuzz
 
 from app.services.matching import config
-from app.services.matching.units import convert_to_base, unit_dimension
+from app.services.matching.units import convert_to_base, is_unrecognized, unit_dimension
 
 _LIST_ITEM_SIMILARITY = 85.0
 
@@ -59,9 +59,14 @@ def _common_base(
         if edim != adim:
             return None
         return convert_to_base(expected, expected_unit), convert_to_base(actual, actual_unit)  # type: ignore[return-value]
-    if edim and not adim:  # assume the actual value shares the requirement's unit
+    if edim and not adim:
+        if is_unrecognized(actual_unit):  # vendor stated a unit we can't reconcile
+            return None
+        # unit absent: assume the actual value shares the requirement's unit
         return convert_to_base(expected, expected_unit), convert_to_base(actual, expected_unit)  # type: ignore[return-value]
     if adim and not edim:
+        if is_unrecognized(expected_unit):
+            return None
         return convert_to_base(expected, actual_unit), convert_to_base(actual, actual_unit)  # type: ignore[return-value]
     return expected, actual  # neither unit recognised: compare raw magnitudes
 

@@ -42,6 +42,30 @@ def test_numeric_dimension_mismatch_no_match():
     assert r.status == M.NO_MATCH
 
 
+def test_numeric_hz_vs_nits_no_match():
+    # regression: 64 Hz must not match 64 nits (different physical quantities)
+    r = M.match_numeric("==", 64, "Hz", 64, "nits")
+    assert r.status == M.NO_MATCH
+
+
+def test_numeric_known_vs_unrecognized_unit_no_match():
+    # a vendor unit we don't recognise must not be assumed to share the
+    # requirement's unit
+    r = M.match_numeric("==", 64, "Hz", 64, "blorps")
+    assert r.status == M.NO_MATCH
+
+
+def test_numeric_bare_actual_assumes_requirement_unit():
+    # vendor stated a bare number: still compared in the requirement's unit
+    r = M.match_numeric(">=", 100, "ms", 90, None)
+    assert r.status == M.PARTIAL
+
+
+def test_numeric_nit_alias_cdm2():
+    r = M.match_numeric(">=", 300, "nits", 350, "cd/m2")
+    assert r.status == M.MATCH
+
+
 def test_numeric_missing_actual_no_match():
     assert M.match_numeric(">=", 20, "Mbps", None, None).status == M.NO_MATCH
 

@@ -130,3 +130,6 @@ def test_same_dimension():
     assert same_dimension("Mbps", "km") is False  # different known dimensions
     assert same_dimension("ports", "widgets") is True  # both unknown -> allowed
     assert same_dimension("V", None) is True  # one absent -> allowed
+    assert same_dimension("Hz", "nits") is False  # both known, different dimensions
+    assert same_dimension("Hz", "blorps") is False  # known vs unrecognized -> rejected
+    assert same_dimension("blorps", "Hz") is False  # symmetric

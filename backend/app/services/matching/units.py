@@ -28,6 +28,7 @@ ANGLE = "angle"  # degree
 PRESSURE = "pressure"  # pascal
 TEMPERATURE = "temperature"  # celsius
 PERCENTAGE = "percentage"  # percent
+LUMINANCE = "luminance"  # candela per square meter (nit)
 
 # canonical token -> (dimension, factor_to_base, offset_to_base)
 _UNITS: dict[str, tuple[str, float, float]] = {
@@ -106,6 +107,8 @@ _UNITS: dict[str, tuple[str, float, float]] = {
     "f": (TEMPERATURE, 5.0 / 9.0, -160.0 / 9.0),
     # percentage (dimensionless family)
     "%": (PERCENTAGE, 1.0, 0.0),
+    # luminance (base: candela per square meter, i.e. nit)
+    "nit": (LUMINANCE, 1.0, 0.0),
 }
 
 # variant spelling -> canonical token
@@ -160,6 +163,7 @@ _ALIASES: dict[str, str] = {
     "kelvin": "k",
     "fahrenheit": "f", "°f": "f", "degf": "f", "degreef": "f", "degreefahrenheit": "f",
     "percent": "%", "percentage": "%", "pct": "%", "pc": "%",
+    "nits": "nit", "cd/m2": "nit", "cd/m²": "nit", "candela/m2": "nit", "candelapersquaremeter": "nit",
 }
 
 
@@ -183,18 +187,29 @@ def unit_dimension(unit: str | None) -> str | None:
     return _UNITS[token][0]
 
 
+def is_unrecognized(unit: str | None) -> bool:
+    """True when a unit string is present (non-empty) but not in the registry."""
+    return bool(unit and unit.strip()) and normalize_unit(unit) is None
+
+
 def same_dimension(unit_a: str | None, unit_b: str | None) -> bool:
     """Whether two units are comparable.
 
-    Compatible when both share a dimension, or when at least one is unknown/absent
-    (we can't prove incompatibility, so we allow it and let value comparison decide).
-    Only two *known but differing* dimensions are treated as incompatible.
+    Compatible when both share a dimension, when either side is absent (a bare
+    number may share the other side's unit), or when both are unrecognized (we
+    can't prove incompatibility). A *known* unit against a present-but-unrecognized
+    unit is incompatible: the document explicitly states a quantity we cannot
+    reconcile with the known dimension (e.g. "Hz" vs "nits" before nits was known).
     """
     dim_a = unit_dimension(unit_a)
     dim_b = unit_dimension(unit_b)
-    if dim_a is None or dim_b is None:
-        return True
-    return dim_a == dim_b
+    if dim_a is not None and dim_b is not None:
+        return dim_a == dim_b
+    if dim_a is not None and is_unrecognized(unit_b):
+        return False
+    if dim_b is not None and is_unrecognized(unit_a):
+        return False
+    return True
 
 
 def convert_to_base(value: float, unit: str | None) -> float | None:

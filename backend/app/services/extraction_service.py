@@ -82,6 +82,7 @@ Produce one requirement item per distinct equipment/item, each with:
   - parameter_label: a short human-readable name, e.g. "Throughput", "Input Voltage"
   - parameter_text: the requirement for this parameter as stated in the document
   - expected_value / unit / operator: if the parameter specifies a measurable threshold (e.g. ">= 20 Mbps"), split into expected_value="20", unit="Mbps", operator=">=". Use operator values from: ">=", "<=", "==", ">", "<". If not measurable, leave all three null.
+  - Whenever you produce a numeric expected_value, you MUST also produce its unit exactly as written in the document (e.g. "Mbps", "Hz", "nits", "cd/m²", "%", "ports"). Never guess, infer, or convert a unit that is not written. Leave unit null only when the document genuinely states a bare number with no unit or noun after it.
   - is_mandatory: true unless the parameter is explicitly marked optional/preferred/nice-to-have
   - source_page: the page number (as marked by "--- page N ---") the parameter text was found on
 
@@ -96,6 +97,7 @@ For every distinct specification, produce one item with:
 - spec_label: a short human-readable name
 - spec_text: the specification as stated in the document
 - value / unit: if the specification states a measurable value (e.g. "20 Mbps"), split into value="20", unit="Mbps". If not measurable, leave both null.
+- Whenever you produce a numeric value, you MUST also produce its unit exactly as written in the document (e.g. "Mbps", "Hz", "nits", "cd/m²", "%", "ports"). Never guess, infer, or convert a unit that is not written. Leave unit null only when the document genuinely states a bare number with no unit or noun after it.
 - source_page: the page number (as marked by "--- page N ---") the specification text was found on
 
 Do not compare, score, or judge specifications. Only extract what is stated."""

@@ -15,6 +15,14 @@ def test_unit_dimension_gate_penalizes_wrong_dimension():
     assert candidate_score(req, right) > candidate_score(req, wrong)
 
 
+def test_unit_dimension_gate_penalizes_unrecognized_unit():
+    # a known requirement unit vs an unrecognized spec unit is penalized too
+    req = make_requirement(key="refresh_rate", label="Refresh Rate", unit="Hz")
+    right = make_specification(key="refresh_rate", label="Refresh Rate", unit="Hz")
+    wrong = make_specification(key="refresh_rate", label="Refresh Rate", unit="blorps")
+    assert candidate_score(req, right) > candidate_score(req, wrong)
+
+
 def test_best_candidate_picks_correct_spec():
     req = make_requirement(key="power", label="Power Consumption")
     specs = [
