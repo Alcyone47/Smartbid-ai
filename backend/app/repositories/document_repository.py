@@ -44,3 +44,7 @@ class DocumentRepository:
     async def update_page_count(self, document: Document, page_count: int) -> None:
         document.page_count = page_count
         await self._db.commit()
+
+    async def update_structure_analysis(self, document: Document, structure_analysis: dict | None) -> None:
+        document.structure_analysis = structure_analysis
+        await self._db.commit()

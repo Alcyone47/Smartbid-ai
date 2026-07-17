@@ -10,11 +10,13 @@ from app.core.llm.base import LLMProvider
 from app.schemas.extraction import (
     REQUIREMENT_EXTRACTION_JSON_SCHEMA,
     SPECIFICATION_EXTRACTION_JSON_SCHEMA,
+    ParameterExtractionItem,
     RequirementExtractionItem,
     RequirementExtractionResult,
     SpecificationExtractionItem,
     SpecificationExtractionResult,
 )
+from app.services.matching.normalization import canonicalize_text
 from app.services.parsing.document_parser import DocumentParser, ParsedDocument
 from app.services.parsing.text_cleaner import TextCleaner
 from app.services.structure_service import StructureAnalyzer, select_technical_pages
@@ -43,17 +45,57 @@ def _parse_batch_items(data: object, key: str, model: type[_ItemT]) -> tuple[lis
             skipped += 1
     return items, skipped
 
+
+def _parse_requirement_items(data: object) -> tuple[list[RequirementExtractionItem], int, int]:
+    """Validate a batch's requirement items, salvaging per parameter.
+
+    Parameters are validated individually so one malformed parameter drops only
+    itself — not the whole equipment item and its valid sibling parameters.
+    Returns (items, skipped_items, skipped_parameters).
+    """
+    raw_list = data.get("requirements", []) if isinstance(data, dict) else []
+    if not isinstance(raw_list, list):
+        return [], 0, 0
+    items: list[RequirementExtractionItem] = []
+    skipped_items = 0
+    skipped_parameters = 0
+    for raw in raw_list:
+        if not isinstance(raw, dict):
+            skipped_items += 1
+            continue
+        raw_parameters = raw.get("parameters", [])
+        parameters: list[ParameterExtractionItem] = []
+        if isinstance(raw_parameters, list):
+            for raw_parameter in raw_parameters:
+                try:
+                    parameters.append(ParameterExtractionItem.model_validate(raw_parameter))
+                except ValidationError:
+                    skipped_parameters += 1
+        try:
+            item = RequirementExtractionItem.model_validate({**raw, "parameters": []})
+        except ValidationError:
+            skipped_items += 1
+            continue
+        item.parameters = parameters
+        items.append(item)
+    return items, skipped_items, skipped_parameters
+
+
 def _merge_requirements(items: list[RequirementExtractionItem]) -> list[RequirementExtractionItem]:
-    """Merge requirement items sharing an equipment slug across batches.
+    """Merge requirement items describing the same equipment across batches.
 
     A single equipment/item can be described across several page batches; those
     partial requirement items are folded into one, concatenating their parameters
     while keeping the first-seen label/category/source_page.
+
+    Merging requires BOTH the slug and the canonicalized label to match:
+    distinct equipment that happen to share a slug (e.g. two different items the
+    LLM both called "camera") must not collapse into one requirement row.
     """
-    merged: dict[str, RequirementExtractionItem] = {}
-    order: list[str] = []
+    merged: dict[tuple[str, str], RequirementExtractionItem] = {}
+    order: list[tuple[str, str]] = []
     for item in items:
-        key = item.requirement_key
+        key = (item.requirement_key, canonicalize_text(item.requirement_label))
         existing = merged.get(key)
         if existing is None:
             merged[key] = item.model_copy(deep=True)
@@ -64,11 +106,25 @@ def _merge_requirements(items: list[RequirementExtractionItem]) -> list[Requirem
                 existing.category = item.category
             if existing.source_page is None and item.source_page is not None:
                 existing.source_page = item.source_page
-    return [merged[key] for key in order]
+
+    # Distinct equipment kept apart above may still share a slug; suffix the
+    # later ones so equipment_key stays unique for matching and reporting.
+    result: list[RequirementExtractionItem] = []
+    seen_keys: dict[str, int] = {}
+    for key in order:
+        item = merged[key]
+        count = seen_keys.get(item.requirement_key, 0)
+        seen_keys[item.requirement_key] = count + 1
+        if count:
+            item.requirement_key = f"{item.requirement_key}_{count + 1}"
+        result.append(item)
+    return result
 
 
 REQUIREMENT_SYSTEM_PROMPT = """You are extracting structured technical requirements from the technical-specification sections of an RFP (Request for Proposal) document.
 An RFP asks for one or more distinct pieces of equipment/items (e.g. a network switch, a UPS, a server). Model each equipment/item as ONE requirement, and list its individual technical parameters underneath it. Each parameter states a Minimum Required Specification.
+
+Be EXHAUSTIVE. Every distinct equipment/item in the text must appear in your output — especially numbered section headings like "12. Outdoor Switch" or "25. PVC conduit", each of which introduces one equipment/item even when its specification table is short or continues from a previous page. Extract EVERY parameter row of every specification table; never summarize a table down to a few rows. A specification table that starts mid-page with no heading belongs to the most recent equipment heading before it.
 
 Only extract TECHNICAL parameters of equipment/software. Ignore any administrative, commercial, pricing, legal, eligibility, bid-process, SLA, payment, warranty or contractual text that may appear.
 
@@ -116,9 +172,19 @@ def _segment_numbered_pages(numbered_pages: list[PageSegment], max_chars: int) -
     for page_number, page in numbered_pages:
         if len(page) <= max_chars:
             segments.append((page_number, page))
-        else:
-            for start in range(0, len(page), max_chars):
-                segments.append((page_number, page[start : start + max_chars]))
+            continue
+        # Slice at line boundaries so a table row / sentence is never cut in
+        # half mid-line (a raw char offset once split spec-table rows, garbling
+        # them for the LLM).
+        start = 0
+        while start < len(page):
+            end = min(start + max_chars, len(page))
+            if end < len(page):
+                cut = page.rfind("\n", start + 1, end)
+                if cut > start:
+                    end = cut + 1
+            segments.append((page_number, page[start:end]))
+            start = end
     return segments
 
 
@@ -181,6 +247,9 @@ class RequirementExtractionOutcome:
     result: RequirementExtractionResult
     raw_response: dict
     page_count: int
+    # Audit trail of the structure pre-pass: classified sections + the exact
+    # pages extraction consumed. None when the pass was skipped or failed.
+    structure_analysis: dict | None = None
 
 
 @dataclass
@@ -210,36 +279,59 @@ class ExtractionService:
         cleaned_pages = self._text_cleaner.clean_pages(parsed.pages)
         return ParsedDocument(pages=cleaned_pages, page_count=parsed.page_count, outline=parsed.outline)
 
-    async def _select_technical_pages(self, parsed: ParsedDocument) -> list[PageSegment]:
-        """Run the semantic structure pass and return the technical pages as
-        (page_number, text) pairs. Falls back to all pages when disabled, when no
-        technical section is found, or when the structure call fails (rate limits
-        still propagate so the task can retry)."""
+    async def _select_technical_pages(
+        self, parsed: ParsedDocument
+    ) -> tuple[list[PageSegment], dict | None]:
+        """Run the semantic structure pass and return the pages to extract as
+        (page_number, text) pairs, plus a JSON-serializable audit payload of the
+        decision. Falls back to all pages when disabled, when no technical
+        section is found, or when the structure call fails (rate limits still
+        propagate so the task can retry)."""
         all_pages: list[PageSegment] = [(index + 1, page) for index, page in enumerate(parsed.pages)]
         if not settings.structure_analysis_enabled:
-            return all_pages
+            return all_pages, None
         try:
             result = await self._structure_analyzer.analyze(parsed)
         except LLMRateLimitError:
             raise
         except Exception:  # noqa: BLE001 - structure analysis is best-effort
             logger.warning("Structure analysis failed; extracting all pages", exc_info=True)
-            return all_pages
+            return all_pages, None
 
-        technical = select_technical_pages(result, parsed.page_count)
-        if technical is None:
+        selection = select_technical_pages(result, parsed.page_count)
+        if selection is None:
             logger.info("Structure analysis found no technical sections; extracting all pages")
-            return all_pages
-        technical_set = set(technical)
-        selected = [(number, text) for number, text in all_pages if number in technical_set]
-        logger.info("Structure analysis selected %d of %d pages as technical", len(selected), parsed.page_count)
-        return selected or all_pages
+            return all_pages, {
+                "sections": [section.model_dump() for section in result.sections],
+                "selected_pages": [number for number, _ in all_pages],
+                "fallback": "no_technical_sections",
+            }
+        selected_set = set(selection.pages)
+        selected = [(number, text) for number, text in all_pages if number in selected_set]
+        logger.info(
+            "Structure analysis: %d/%d pages selected (%d technical, %d excluded as non-technical, "
+            "%d uncovered-by-any-section included)",
+            len(selected),
+            parsed.page_count,
+            selection.technical_pages,
+            selection.excluded_pages,
+            selection.uncovered_pages_included,
+        )
+        structure_payload = {
+            "sections": [section.model_dump() for section in result.sections],
+            "selected_pages": selection.pages,
+            "page_count": parsed.page_count,
+            "technical_pages": selection.technical_pages,
+            "excluded_pages": selection.excluded_pages,
+            "uncovered_pages_included": selection.uncovered_pages_included,
+        }
+        return (selected or all_pages), structure_payload
 
     async def extract_requirements(
         self, content: bytes, mime_type: str, progress_callback: ProgressCallback | None = None
     ) -> RequirementExtractionOutcome:
         parsed = self._parse_and_clean(content, mime_type)
-        technical_pages = await self._select_technical_pages(parsed)
+        technical_pages, structure_analysis = await self._select_technical_pages(parsed)
         batches = _batch_numbered_pages(
             technical_pages, settings.extraction_max_chars_per_batch, settings.extraction_pages_per_batch
         )
@@ -254,11 +346,14 @@ class ExtractionService:
                 json_schema=REQUIREMENT_EXTRACTION_JSON_SCHEMA,
                 schema_name="extract_requirements",
             )
-            batch_items, skipped = _parse_batch_items(
-                llm_result.data, "requirements", RequirementExtractionItem
-            )
-            if skipped:
-                logger.warning("Skipped %d malformed requirement item(s) in batch %d", skipped, index + 1)
+            batch_items, skipped_items, skipped_parameters = _parse_requirement_items(llm_result.data)
+            if skipped_items or skipped_parameters:
+                logger.warning(
+                    "Batch %d: skipped %d malformed requirement item(s) and %d malformed parameter(s)",
+                    index + 1,
+                    skipped_items,
+                    skipped_parameters,
+                )
             requirements.extend(batch_items)
             raw_responses.append(llm_result.raw_response)
             await _report_progress(progress_callback, index + 1, len(batches))
@@ -267,6 +362,7 @@ class ExtractionService:
             result=RequirementExtractionResult(requirements=_merge_requirements(requirements)),
             raw_response={"batches": raw_responses},
             page_count=parsed.page_count,
+            structure_analysis=structure_analysis,
         )
 
     async def extract_specifications(

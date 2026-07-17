@@ -163,3 +163,62 @@ def test_merge_requirements_folds_by_equipment_key():
     merged = _merge_requirements(items)
     assert [r.requirement_key for r in merged] == ["ups", "switch"]
     assert [p.parameter_key for p in merged[0].parameters] == ["cap", "runtime"]
+
+
+def test_merge_requirements_keeps_distinct_labels_sharing_a_slug_apart():
+    items = [
+        RequirementExtractionItem(
+            requirement_key="camera", requirement_label="Camera Type A (ANPR)",
+            parameters=[ParameterExtractionItem(parameter_key="mp", parameter_label="MP", parameter_text="2 MP")],
+        ),
+        RequirementExtractionItem(
+            requirement_key="camera", requirement_label="Camera Type B (Surveillance)",
+            parameters=[ParameterExtractionItem(parameter_key="mp", parameter_label="MP", parameter_text="8 MP")],
+        ),
+    ]
+    merged = _merge_requirements(items)
+    assert len(merged) == 2
+    # The second distinct equipment gets a disambiguated slug.
+    assert [r.requirement_key for r in merged] == ["camera", "camera_2"]
+
+
+def test_merge_requirements_merges_same_label_ignoring_case_and_punctuation():
+    items = [
+        RequirementExtractionItem(
+            requirement_key="ups", requirement_label="Online UPS",
+            parameters=[ParameterExtractionItem(parameter_key="cap", parameter_label="Capacity", parameter_text="20 KVA")],
+        ),
+        RequirementExtractionItem(
+            requirement_key="ups", requirement_label="online-ups",
+            parameters=[ParameterExtractionItem(parameter_key="runtime", parameter_label="Runtime", parameter_text="30 min")],
+        ),
+    ]
+    merged = _merge_requirements(items)
+    assert len(merged) == 1
+    assert [p.parameter_key for p in merged[0].parameters] == ["cap", "runtime"]
+
+
+def test_parse_requirement_items_salvages_valid_parameters():
+    """One malformed parameter must drop only itself — not its equipment item
+    and the sibling parameters (that once wiped whole equipment rows)."""
+    from app.services.extraction_service import _parse_requirement_items
+
+    data = {
+        "requirements": [
+            {
+                "requirement_key": "switch",
+                "requirement_label": "Switch",
+                "parameters": [
+                    {"parameter_key": "ports", "parameter_label": "Ports", "parameter_text": "24"},
+                    {"parameter_key": "throughput"},  # malformed: missing required fields
+                    {"parameter_key": "capacity", "parameter_label": "Capacity", "parameter_text": "8 Gbps"},
+                ],
+            },
+            "not-a-dict",  # malformed item
+        ]
+    }
+    items, skipped_items, skipped_parameters = _parse_requirement_items(data)
+    assert len(items) == 1
+    assert [p.parameter_key for p in items[0].parameters] == ["ports", "capacity"]
+    assert skipped_items == 1
+    assert skipped_parameters == 1

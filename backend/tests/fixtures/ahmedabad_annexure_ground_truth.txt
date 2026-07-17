@@ -1,0 +1,34 @@
+# Ahmedabad Smart City RFP — Annexure I "Technical Specifications" (pages 155-193).
+# The 31 numbered equipment items, taken from the document's own TOC.
+# Used with scripts/eval_extraction.py to measure extraction recall.
+Galvanized cantilever pole
+Gantry including mounting/installation
+Pole for surveillance cameras
+Power Cable
+Junction Box, with adjustable mounting frames
+Surge Protection Power Strips
+Voltage Stabilizers at Junctions
+Camera Type A (Box Cameras for ANPR, RLVD & Speed Detection)
+Camera Type B (Box Camera for Surveillance)
+Camera Type C: PTZ
+External IR Illuminator
+Outdoor 8 Port Managed L2 Switch with Fiber Port
+Indoor 8 Port Managed L2 Switch with Fiber Port
+42U Server Rack for DC
+42U Network Racks for DC
+Storage (For Applications)
+Storage (for Video's)
+Blade Chassis and Server
+DC Core Router
+DC Core L3 switch at ICCC
+48 port Layer 2 Switch (Access/Aggregation/TOR/Server Farm Switch)
+48 Port Managed L2 switch for OOB connectivity
+Unified Threat Management (UTM)
+CAT 6 cable
+PVC conduit
+6U wall mount rack for Wi-Fi locations
+Virtual Wireless Controller
+Wireless Indoor Access point
+Online UPS for ICCC
+Internet Router at ICCC
+Precision Air-Condition (PAC) for ICCC (Data Centre Server farm area)

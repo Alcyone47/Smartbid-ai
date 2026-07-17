@@ -72,6 +72,7 @@ async def _process_document_async(document_id: str) -> None:
             ]
             await requirement_repo.delete_by_document(document.id)
             await requirement_repo.bulk_create(requirements)
+            await document_repo.update_structure_analysis(document, outcome.structure_analysis)
         elif document.doc_type == "vendor_proposal":
             outcome = await extraction_service.extract_specifications(
                 content, document.mime_type, progress_callback=on_progress

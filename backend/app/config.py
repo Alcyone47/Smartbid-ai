@@ -35,18 +35,27 @@ class Settings(BaseSettings):
     # (not one call per page) while staying under the model's context window. A batch
     # closes at whichever limit hits first: extraction_pages_per_batch distinct pages,
     # or extraction_max_chars_per_batch characters of source text (~4 chars/token).
-    extraction_pages_per_batch: int = 8
+    # 4 pages/call: dense spec-table RFPs lose recall in bigger batches — lite
+    # models start skipping whole equipment sections and thinning parameter
+    # lists when a single call carries too many tables.
+    extraction_pages_per_batch: int = 4
     extraction_max_chars_per_batch: int = 48000
-    extraction_max_output_tokens: int = 4000
+    # Output budget for one extraction call. A dense 8-page spec-table batch can
+    # legitimately need thousands of output tokens; a low cap silently truncates
+    # the JSON (Gemini/Claude) or 413s (Groq).
+    extraction_max_output_tokens: int = 16000
 
     # Before extracting requirements, a semantic LLM "structure analysis" pass
     # classifies each RFP section as technical vs non-technical so only technical
     # specification pages are extracted. structure_analysis_max_chars caps the
     # compact structure digest (TOC + headings + page/table hints) sent to that
     # single classify call — not the full document body. If disabled or the pass
-    # finds no technical sections, extraction falls back to all pages.
+    # finds no technical sections, extraction falls back to all pages. The cap
+    # must be generous: the digest degrades gracefully when over it, but a
+    # too-small budget once truncated a 193-page RFP's TOC mid-list and hid the
+    # final technical annexures from the classifier.
     structure_analysis_enabled: bool = True
-    structure_analysis_max_chars: int = 12000
+    structure_analysis_max_chars: int = 24000
 
     # Rate-limit (HTTP 429) handling: exponential backoff with jitter, capped, honoring
     # the server's suggested retryDelay/Retry-After when larger. Used both for in-call

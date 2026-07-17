@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import ForeignKey, String, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -25,6 +25,9 @@ class Document(Base):
     mime_type: Mapped[str] = mapped_column(String, nullable=False)
     page_count: Mapped[int | None] = mapped_column()
     status: Mapped[str] = mapped_column(String, nullable=False, server_default="queued")
+    # Audit trail of the structure pre-pass (classified sections + selected
+    # pages) so "why was this page skipped?" is answerable from the DB.
+    structure_analysis: Mapped[dict | None] = mapped_column(JSONB)
     extraction_progress: Mapped[int] = mapped_column(nullable=False, server_default=text("0"))
     error_message: Mapped[str | None] = mapped_column(String)
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
