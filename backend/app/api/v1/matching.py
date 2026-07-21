@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from typing import Sequence
 
 from fastapi import APIRouter, Depends, status
@@ -9,8 +10,9 @@ from app.api.projects import _get_org_project
 from app.core.exceptions import AppException
 from app.db.session import get_db
 from app.dependencies import CurrentUser, get_current_org_user
-from app.models.compliance import ComplianceMatrixEntry
+from app.models.compliance import ComplianceMatrixEntry, EquipmentMatch
 from app.repositories.compliance_repository import ComplianceRepository
+from app.repositories.equipment_match_repository import EquipmentMatchRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.specification_repository import SpecificationRepository
 from app.repositories.vendor_repository import VendorRepository
@@ -19,7 +21,13 @@ from app.schemas.compliance import (
     EquipmentSpecComparison,
     VendorComplianceSummaryRead,
 )
-from app.services.matching import ScoredEntry, compute_compliance_summary, match_requirements
+from app.services.matching import (
+    EQUIPMENT_MATCHED,
+    ScoredEntry,
+    compute_compliance_summary,
+    match_equipment,
+    match_equipment_parameters,
+)
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["matching"])
 
@@ -49,55 +57,42 @@ def _to_spec_comparison(row: Row) -> EquipmentSpecComparison:
     )
 
 
-def _group_by_equipment(rows: Sequence[Row]) -> list[EquipmentComplianceGroup]:
-    """Fold (entry, parameter, specification, vendor_name) rows into one group per
-    (vendor, equipment/requirement), computing fractional-credit compliance.
+def _build_equipment_groups(
+    equipment_rows: Sequence[Row], compliance_rows: Sequence[Row]
+) -> list[EquipmentComplianceGroup]:
+    """Fold Stage-1 EquipmentMatch rows (one per requirement/vendor, including
+    unmatched equipment with zero specs) together with Stage-2 compliance rows
+    (keyed by vendor + requirement) into one group per (vendor, equipment).
     """
-    groups: dict[tuple[uuid.UUID, str], dict] = {}
-    order: list[tuple[uuid.UUID, str]] = []
-    for row in rows:
-        entry, parameter, _specification, vendor_name = row
-        key = (entry.vendor_id, parameter.equipment_key)
-        if key not in groups:
-            groups[key] = {
-                "equipment_key": parameter.equipment_key,
-                "equipment_label": parameter.equipment_label,
-                "vendor_name": vendor_name,
-                "vendor_id": entry.vendor_id,
-                "credit_sum": 0.0,
-                "matched": 0,
-                "partial": 0,
-                "unmatched": 0,
-                "specs": [],
-            }
-            order.append(key)
-        bucket = groups[key]
-        bucket["specs"].append(_to_spec_comparison(row))
-        bucket["credit_sum"] += float(entry.match_score) if entry.match_score is not None else 0.0
-        if entry.status == "match":
-            bucket["matched"] += 1
-        elif entry.status == "partial":
-            bucket["partial"] += 1
-        else:
-            bucket["unmatched"] += 1
+    specs_by_group: dict[tuple[uuid.UUID, uuid.UUID], list[EquipmentSpecComparison]] = {}
+    for row in compliance_rows:
+        entry, parameter, _specification, _vendor_name = row
+        key = (entry.vendor_id, parameter.requirement_id)
+        specs_by_group.setdefault(key, []).append(_to_spec_comparison(row))
 
     result: list[EquipmentComplianceGroup] = []
-    for key in order:
-        bucket = groups[key]
-        total = len(bucket["specs"])
-        compliance_pct = round(bucket["credit_sum"] / total * 100, 1) if total else 0.0
+    for equipment_match, requirement, vendor_name in equipment_rows:
+        specs = specs_by_group.get((equipment_match.vendor_id, requirement.id), [])
+        total = len(specs)
+        credit_sum = sum(float(s.match_score) if s.match_score is not None else 0.0 for s in specs)
+        matched = sum(1 for s in specs if s.status == "match")
+        partial = sum(1 for s in specs if s.status == "partial")
+        unmatched = sum(1 for s in specs if s.status not in ("match", "partial"))
+        compliance_pct = round(credit_sum / total * 100, 1) if total else 0.0
         result.append(
             EquipmentComplianceGroup(
-                equipment_key=bucket["equipment_key"],
-                equipment_label=bucket["equipment_label"],
-                vendor_name=bucket["vendor_name"],
-                vendor_id=bucket["vendor_id"],
+                equipment_key=requirement.equipment_key,
+                equipment_label=requirement.equipment_label,
+                vendor_name=vendor_name,
+                vendor_id=equipment_match.vendor_id,
+                match_status=equipment_match.match_status,
+                equipment_match_confidence=float(equipment_match.confidence_score),
                 compliance_pct=compliance_pct,
                 total_specs=total,
-                matched=bucket["matched"],
-                partial=bucket["partial"],
-                unmatched=bucket["unmatched"],
-                specs=bucket["specs"],
+                matched=matched,
+                partial=partial,
+                unmatched=unmatched,
+                specs=specs,
             )
         )
     return result
@@ -128,7 +123,28 @@ async def trigger_matching(
     requirements = await requirement_repo.list_by_project(project_id)
     specifications = await specification_repo.list_by_vendor(vendor_id)
 
-    outcomes = match_requirements(requirements, specifications)
+    # Stage 1: pair each RFP equipment with its best-matching vendor equipment (or
+    # mark it unmatched) — persisted so unmatched equipment surfaces on later reads.
+    equipment_outcomes = match_equipment(requirements, specifications)
+    equipment_rows_to_persist = [
+        EquipmentMatch(
+            org_id=current_user.org_id,
+            project_id=project_id,
+            requirement_id=eo.requirement.id,
+            vendor_id=vendor_id,
+            matched_equipment_key=eo.matched_equipment_key,
+            matched_equipment_label=eo.matched_equipment_label,
+            confidence_score=Decimal(str(eo.confidence_score)),
+            match_status=eo.status,
+            vendor_source_page=eo.vendor_source_page,
+        )
+        for eo in equipment_outcomes
+    ]
+    equipment_match_repo = EquipmentMatchRepository(db)
+    await equipment_match_repo.replace_for_vendor(vendor_id, equipment_rows_to_persist)
+
+    # Stage 2: only for matched equipment, compare its parameters against ONLY its
+    # matched vendor equipment's specs — never a fallback to unrelated equipment.
     entries = [
         ComplianceMatrixEntry(
             org_id=current_user.org_id,
@@ -142,14 +158,21 @@ async def trigger_matching(
             match_score=outcome.match_score,
             rationale=outcome.rationale,
         )
-        for outcome in outcomes
+        for eo in equipment_outcomes
+        if eo.status == EQUIPMENT_MATCHED
+        for outcome in match_equipment_parameters(eo.requirement.parameters, eo.matched_specifications)
     ]
 
     compliance_repo = ComplianceRepository(db)
     await compliance_repo.replace_for_vendor(vendor_id, entries)
 
-    rows: Sequence[Row] = await compliance_repo.list_by_project_with_details(project_id, vendor_id)
-    return _group_by_equipment(rows)
+    equipment_rows: Sequence[Row] = await equipment_match_repo.list_by_project_with_details(
+        project_id, vendor_id
+    )
+    compliance_rows: Sequence[Row] = await compliance_repo.list_by_project_with_details(
+        project_id, vendor_id
+    )
+    return _build_equipment_groups(equipment_rows, compliance_rows)
 
 
 @router.get("/compliance-matrix", response_model=list[EquipmentComplianceGroup])
@@ -159,9 +182,11 @@ async def list_compliance_matrix(
     db: AsyncSession = Depends(get_db),
 ) -> list[EquipmentComplianceGroup]:
     await _get_org_project(project_id, current_user.org_id, db)
+    equipment_match_repo = EquipmentMatchRepository(db)
     compliance_repo = ComplianceRepository(db)
-    rows = await compliance_repo.list_by_project_with_details(project_id)
-    return _group_by_equipment(rows)
+    equipment_rows = await equipment_match_repo.list_by_project_with_details(project_id)
+    compliance_rows = await compliance_repo.list_by_project_with_details(project_id)
+    return _build_equipment_groups(equipment_rows, compliance_rows)
 
 
 @router.get("/compliance-summary", response_model=list[VendorComplianceSummaryRead])

@@ -26,7 +26,14 @@ export interface ProjectUpdateInput {
 
 export type DocType = "rfp" | "vendor_proposal"
 
-export type DocumentStatus = "queued" | "extracting" | "retrying" | "completed" | "failed" | string
+export type DocumentStatus =
+  | "uploaded"
+  | "queued"
+  | "extracting"
+  | "retrying"
+  | "completed"
+  | "failed"
+  | string
 
 export interface Vendor {
   id: string
@@ -117,11 +124,17 @@ export interface EquipmentSpecComparison {
   rationale: string
 }
 
+export type EquipmentMatchStatus = "matched" | "unmatched"
+
 export interface EquipmentComplianceGroup {
   equipment_key: string
   equipment_label: string
   vendor_name: string
   vendor_id: string
+  // Stage-1 outcome: whether a vendor equipment was paired to this RFP equipment.
+  // When "unmatched", specs is always empty — Stage 2 never ran for it.
+  match_status: EquipmentMatchStatus
+  equipment_match_confidence: number | null
   compliance_pct: number
   total_specs: number
   matched: number

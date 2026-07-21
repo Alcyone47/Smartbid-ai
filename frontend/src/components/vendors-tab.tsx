@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
+import { toast } from "sonner"
 import { FileText, Trash2 } from "lucide-react"
-import { useSpecifications } from "@/hooks/use-extraction"
+import { useSpecifications, useTriggerExtraction } from "@/hooks/use-extraction"
 import { useVendors } from "@/hooks/use-vendors"
 import { StatusBadge } from "@/components/status-badge"
 import { DocumentUploadDialog } from "@/components/document-upload-dialog"
@@ -128,19 +129,53 @@ function VendorDocumentRow({ projectId, document }: { projectId: string; documen
     projectId,
     document.status === "completed" ? document.id : undefined,
   )
+  const triggerExtraction = useTriggerExtraction(projectId)
+
+  const handleExtract = async () => {
+    try {
+      await triggerExtraction.mutateAsync(document.id)
+      toast.success("Extraction started")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to start extraction")
+    }
+  }
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg bg-background px-2.5 py-1.5">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <FileText size={13} className="shrink-0 text-muted-foreground" />
-        <span className="truncate text-[12px] text-slate-700">{document.original_filename}</span>
+    <div className="flex flex-col gap-1 rounded-lg bg-background px-2.5 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <FileText size={13} className="shrink-0 text-muted-foreground" />
+          <span className="truncate text-[12px] text-slate-700">{document.original_filename}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-[11px] font-medium text-slate-500">
+            {specifications ? `${specifications.length} specs` : "—"}
+          </span>
+          <StatusBadge status={document.status} />
+          {document.status === "uploaded" || document.status === "failed" ? (
+            <button
+              onClick={handleExtract}
+              disabled={triggerExtraction.isPending}
+              className="text-xs font-semibold text-primary whitespace-nowrap"
+            >
+              {triggerExtraction.isPending ? "Starting…" : "Extract"}
+            </button>
+          ) : null}
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <span className="text-[11px] font-medium text-slate-500">
-          {specifications ? `${specifications.length} specs` : "—"}
-        </span>
-        <StatusBadge status={document.status} />
-      </div>
+      {document.status === "extracting" || document.status === "retrying" ? (
+        <div className="flex items-center gap-2">
+          <div className="h-1 max-w-40 flex-1 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-amber-500 transition-all duration-500"
+              style={{ width: `${document.extraction_progress}%` }}
+            />
+          </div>
+          <span className="text-[11px] font-semibold text-amber-600">
+            {document.status === "retrying" ? "Retrying…" : `${document.extraction_progress}%`}
+          </span>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-from app.services.matching.pairing import best_candidate, candidate_score
+from app.services.matching.pairing import best_candidate, candidate_score, equipment_candidate_score
 from tests._factories import make_requirement, make_specification
 
 
@@ -44,3 +44,17 @@ def test_best_candidate_label_fuzzy_fallback():
 def test_best_candidate_none_when_no_specs():
     best, score = best_candidate(make_requirement(), [])
     assert best is None and score == 0.0
+
+
+def test_equipment_candidate_score_exact_key_match():
+    assert equipment_candidate_score("core_switch", "Core Switch", "core_switch", "Core Switch") == 100.0
+
+
+def test_equipment_candidate_score_label_fuzzy_match():
+    score = equipment_candidate_score("ip_camera", "IP Camera", "ip_cam", "IP Cam")
+    assert 60.0 <= score < 100.0
+
+
+def test_equipment_candidate_score_no_similarity_is_low():
+    score = equipment_candidate_score("ip_camera", "IP Camera", "ups_unit", "UPS Unit")
+    assert score < 60.0

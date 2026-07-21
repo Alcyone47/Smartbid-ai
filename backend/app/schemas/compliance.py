@@ -30,6 +30,10 @@ class EquipmentComplianceGroup(BaseModel):
     equipment_label: str
     vendor_name: str
     vendor_id: uuid.UUID
+    # Stage-1 outcome: whether a vendor equipment was paired to this RFP equipment
+    # at all. When "unmatched", specs is always empty — Stage 2 never ran.
+    match_status: str
+    equipment_match_confidence: float | None
     compliance_pct: float
     total_specs: int
     matched: int

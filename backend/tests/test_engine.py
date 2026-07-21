@@ -124,9 +124,9 @@ def test_equipment_scopes_pairing():
     assert outcome.status != MATCH
 
 
-def test_equipment_fallback_when_no_group_matches():
-    """When no vendor equipment matches the RFP equipment, fall back to the full spec
-    pool so single-item / mislabelled documents still get compared."""
+def test_equipment_no_fallback_when_no_group_matches():
+    """When no vendor equipment matches the RFP equipment, the parameter must be
+    NO_MATCH — never borrowed from an unrelated vendor equipment group."""
     req = make_requirement(
         key="throughput",
         label="Throughput",
@@ -145,8 +145,8 @@ def test_equipment_fallback_when_no_group_matches():
         equipment_label="Totally Unrelated Widget",
     )
     [outcome] = match_requirements([req], [spec])
-    assert outcome.matched_specification is spec
-    assert outcome.status == MATCH
+    assert outcome.matched_specification is None
+    assert outcome.status == NO_MATCH
 
 
 def test_engine_never_imports_llm():

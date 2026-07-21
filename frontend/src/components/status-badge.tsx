@@ -16,13 +16,18 @@ const STATUS_STYLES: Record<string, string> = {
   Active: "bg-emerald-50 text-emerald-600",
   "Needs Review": "bg-red-50 text-red-600",
   // Document extraction lifecycle ("completed" shared with project status above)
-  queued: "bg-slate-100 text-slate-500",
+  uploaded: "bg-slate-100 text-slate-500",
+  queued: "bg-blue-50 text-blue-600",
   extracting: "bg-amber-50 text-amber-600",
   retrying: "bg-orange-50 text-orange-600",
   failed: "bg-red-50 text-red-600",
   match: "bg-emerald-50 text-emerald-600",
   partial: "bg-amber-50 text-amber-600",
   no_match: "bg-red-50 text-red-600",
+  // Equipment-level Stage-1 outcome: no vendor equipment was found to compare
+  // against at all (distinct from a parameter-level no_match, which implies a
+  // comparison happened and failed).
+  no_equipment_match: "bg-red-50 text-red-600",
 }
 
 function formatLabel(status: string) {

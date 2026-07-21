@@ -24,7 +24,9 @@ class Document(Base):
     original_filename: Mapped[str] = mapped_column(String, nullable=False)
     mime_type: Mapped[str] = mapped_column(String, nullable=False)
     page_count: Mapped[int | None] = mapped_column()
-    status: Mapped[str] = mapped_column(String, nullable=False, server_default="queued")
+    # "uploaded" = sitting in storage, extraction not yet requested. Triggering
+    # extraction moves it to "queued" (waiting for a worker), then "extracting".
+    status: Mapped[str] = mapped_column(String, nullable=False, server_default="uploaded")
     # Audit trail of the structure pre-pass (classified sections + selected
     # pages) so "why was this page skipped?" is answerable from the DB.
     structure_analysis: Mapped[dict | None] = mapped_column(JSONB)

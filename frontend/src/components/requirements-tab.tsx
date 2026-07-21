@@ -1,11 +1,6 @@
 import { useRequirements } from "@/hooks/use-extraction"
 import type { Document, Requirement } from "@/types/api"
 
-const PRIORITY_COLOR: Record<string, string> = {
-  true: "#DC2626",
-  false: "#2563EB",
-}
-
 export function RequirementsTab({ projectId, rfpDocument }: { projectId: string; rfpDocument: Document | undefined }) {
   const { data: requirements, isLoading } = useRequirements(projectId, rfpDocument?.id)
 
@@ -34,9 +29,6 @@ export function RequirementsTab({ projectId, rfpDocument }: { projectId: string;
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
               Minimum Required Specification
             </th>
-            <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase">
-              Mandatory
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -53,7 +45,7 @@ function RequirementGroup({ requirement }: { requirement: Requirement }) {
   return (
     <>
       <tr className="border-t border-border bg-background/60">
-        <td colSpan={4} className="px-5 py-2.5">
+        <td colSpan={3} className="px-5 py-2.5">
           <span className="text-[13px] font-semibold text-foreground">{requirement.equipment_label}</span>
           {requirement.category ? (
             <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
@@ -80,14 +72,6 @@ function RequirementGroup({ requirement }: { requirement: Requirement }) {
             ) : (
               "—"
             )}
-          </td>
-          <td className="px-5 py-3">
-            <span
-              className="text-[11.5px] font-semibold"
-              style={{ color: PRIORITY_COLOR[String(p.is_mandatory)] }}
-            >
-              {p.is_mandatory ? "Mandatory" : "Optional"}
-            </span>
           </td>
         </tr>
       ))}

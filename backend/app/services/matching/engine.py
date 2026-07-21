@@ -25,6 +25,25 @@ if TYPE_CHECKING:
     )
 
 
+EQUIPMENT_MATCHED = "matched"
+EQUIPMENT_UNMATCHED = "unmatched"
+
+
+@dataclass
+class EquipmentMatchOutcome:
+    """Stage-1 result for one RFP equipment (Requirement) against one vendor's specs."""
+
+    requirement: "Requirement"
+    matched_equipment_key: str | None
+    matched_equipment_label: str | None
+    confidence_score: float
+    status: str
+    vendor_source_page: int | None
+    # Transient — the Stage-1-matched vendor specs, for Stage 2 to consume. Not
+    # persisted (EquipmentMatch stores only the key/label/score/status).
+    matched_specifications: list["ExtractedSpecification"]
+
+
 @dataclass
 class MatchOutcome:
     # ``requirement`` is a single parameter (with its Minimum Required
@@ -91,6 +110,25 @@ def _group_specs_by_equipment(
     return dict(groups)
 
 
+def _best_equipment_candidate(
+    req_equipment_key: str,
+    req_equipment_label: str,
+    spec_groups: dict[str, list["ExtractedSpecification"]],
+) -> tuple[str | None, str | None, float, list["ExtractedSpecification"]]:
+    """Best-scoring vendor equipment group for an RFP equipment, regardless of
+    threshold (score 0.0 / empty list if there are no vendor equipment groups)."""
+    best_key: str | None = None
+    best_label: str | None = None
+    best_specs: list["ExtractedSpecification"] = []
+    best_score = 0.0
+    for spec_key, specs in spec_groups.items():
+        spec_label = specs[0].equipment_label if specs else spec_key
+        score = equipment_candidate_score(req_equipment_key, req_equipment_label, spec_key, spec_label)
+        if score > best_score:
+            best_score, best_key, best_label, best_specs = score, spec_key, spec_label, specs
+    return best_key, best_label, best_score, best_specs
+
+
 def _match_vendor_equipment(
     req_equipment_key: str,
     req_equipment_label: str,
@@ -99,19 +137,68 @@ def _match_vendor_equipment(
     """Pick the vendor equipment group that best corresponds to an RFP equipment group.
 
     Returns the scoped spec list, or None when no vendor equipment clears the
-    similarity threshold (caller then falls back to the full spec pool).
+    similarity threshold.
     """
-    best_specs: list["ExtractedSpecification"] | None = None
-    best_score = 0.0
-    for spec_key, specs in spec_groups.items():
-        spec_label = specs[0].equipment_label if specs else spec_key
-        score = equipment_candidate_score(req_equipment_key, req_equipment_label, spec_key, spec_label)
-        if score > best_score:
-            best_score = score
-            best_specs = specs
-    if best_specs is None or best_score < config.EQUIPMENT_PAIRING_MIN_SIMILARITY:
+    _key, _label, best_score, best_specs = _best_equipment_candidate(
+        req_equipment_key, req_equipment_label, spec_groups
+    )
+    if not best_specs or best_score < config.EQUIPMENT_PAIRING_MIN_SIMILARITY:
         return None
     return best_specs
+
+
+def match_equipment(
+    requirements: list["Requirement"],
+    specifications: list["ExtractedSpecification"],
+) -> list[EquipmentMatchOutcome]:
+    """Stage 1: for each RFP equipment (Requirement), pick the single best-matching
+    vendor equipment group for this vendor's specs, or mark it unmatched. No
+    fallback to the unscoped spec pool — this is the persisted, auditable pairing
+    that Stage 2 (``match_equipment_parameters``) must never bypass.
+    """
+    spec_groups = _group_specs_by_equipment(specifications)
+    outcomes: list[EquipmentMatchOutcome] = []
+    for requirement in requirements:
+        key, label, score, specs = _best_equipment_candidate(
+            requirement.equipment_key, requirement.equipment_label, spec_groups
+        )
+        if not specs or score < config.EQUIPMENT_PAIRING_MIN_SIMILARITY:
+            outcomes.append(
+                EquipmentMatchOutcome(
+                    requirement=requirement,
+                    matched_equipment_key=None,
+                    matched_equipment_label=None,
+                    confidence_score=round(score, 2),
+                    status=EQUIPMENT_UNMATCHED,
+                    vendor_source_page=None,
+                    matched_specifications=[],
+                )
+            )
+            continue
+        pages = [s.source_page for s in specs if s.source_page is not None]
+        outcomes.append(
+            EquipmentMatchOutcome(
+                requirement=requirement,
+                matched_equipment_key=key,
+                matched_equipment_label=label,
+                confidence_score=round(score, 2),
+                status=EQUIPMENT_MATCHED,
+                vendor_source_page=min(pages) if pages else None,
+                matched_specifications=specs,
+            )
+        )
+    return outcomes
+
+
+def match_equipment_parameters(
+    parameters: list["RequirementParameter"],
+    vendor_specs: list["ExtractedSpecification"],
+) -> list[MatchOutcome]:
+    """Stage 2: compare one equipment's parameters against ONLY its Stage-1-matched
+    vendor specs. Callers must not invoke this for unmatched equipment — skip it
+    entirely rather than passing an unscoped/empty substitute.
+    """
+    return [evaluate_requirement(parameter, vendor_specs) for parameter in parameters]
 
 
 def _flatten_parameters(
@@ -139,9 +226,14 @@ def match_requirements(
 ) -> list[MatchOutcome]:
     """Equipment-first matching over the hierarchy: each Requirement is one
     equipment/item; its parameters are compared only against the vendor equipment
-    group that best corresponds to it. Falls back to the full spec pool when no
-    vendor equipment matches, so single-equipment ("general") documents behave
-    exactly as before.
+    group that best corresponds to it. When no vendor equipment clears the
+    similarity threshold, that equipment's parameters are compared against an
+    empty pool (i.e. NO_MATCH) — never against unrelated vendor equipment.
+
+    Kept as a convenience one-shot function for callers/tests that pass bare
+    parameters without a real ``Requirement`` (no ``id`` to key a persisted
+    Stage-1 pairing). The production API path uses ``match_equipment`` +
+    ``match_equipment_parameters`` directly so Stage-1 outcomes can be persisted.
     """
     parameters = _flatten_parameters(requirements)
     spec_groups = _group_specs_by_equipment(specifications)
@@ -154,9 +246,7 @@ def match_requirements(
             matched = _match_vendor_equipment(
                 equipment_key, parameter.equipment_label, spec_groups
             )
-            scoped_specs_by_equipment[equipment_key] = (
-                matched if matched is not None else specifications
-            )
+            scoped_specs_by_equipment[equipment_key] = matched if matched is not None else []
 
     return [
         evaluate_requirement(parameter, scoped_specs_by_equipment[parameter.equipment_key])

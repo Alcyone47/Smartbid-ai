@@ -53,7 +53,7 @@ export function DocumentRow({ projectId, document }: { projectId: string; docume
         ) : null}
       </div>
       <StatusBadge status={document.status} />
-      {document.status === "queued" || document.status === "failed" ? (
+      {document.status === "uploaded" || document.status === "failed" ? (
         <button
           onClick={handleExtract}
           disabled={triggerExtraction.isPending}

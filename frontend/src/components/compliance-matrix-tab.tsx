@@ -12,15 +12,17 @@ const PAGE_SIZE = 8
 const SELECT_CLASS =
   "rounded-lg border border-border bg-card px-2.5 py-1.75 text-[12.5px] text-slate-700"
 
-type ComplianceFilter = "all" | "match" | "partial" | "unmet"
+type ComplianceFilter = "all" | "match" | "partial" | "unmet" | "no_equipment"
 
 function complianceColor(pct: number) {
   return pct >= 85 ? "#059669" : pct >= 60 ? "#D97706" : "#DC2626"
 }
 
-// An equipment's overall outcome: fully met (all specs matched), unmet (nothing
-// matched or partially credited), or partial (anything in between).
+// An equipment's overall outcome: no vendor equipment was even found (Stage 1
+// unmatched), fully met (all specs matched), unmet (nothing matched or partially
+// credited), or partial (anything in between).
 function overallStatus(group: EquipmentComplianceGroup): Exclude<ComplianceFilter, "all"> {
+  if (group.match_status === "unmatched") return "no_equipment"
   if (group.total_specs > 0 && group.matched === group.total_specs) return "match"
   if (group.matched === 0 && group.partial === 0) return "unmet"
   return "partial"
@@ -173,6 +175,7 @@ export function ComplianceMatrixTab({
           <option value="match">Match</option>
           <option value="partial">Partial match</option>
           <option value="unmet">Unmet</option>
+          <option value="no_equipment">Equipment not found</option>
         </select>
         {filtersActive ? (
           <button
@@ -225,16 +228,19 @@ export function ComplianceMatrixTab({
             ) : null}
             {paged.map((group) => {
               const key = groupKey(group)
-              const isExpanded = expandedKey === key
+              const isUnmatched = group.match_status === "unmatched"
+              const isExpanded = !isUnmatched && expandedKey === key
               return (
                 <Fragment key={key}>
                   <tr
-                    onClick={() => setExpandedKey(isExpanded ? null : key)}
-                    className="cursor-pointer border-t border-slate-100 hover:bg-background"
+                    onClick={() => !isUnmatched && setExpandedKey(isExpanded ? null : key)}
+                    className={`border-t border-slate-100 ${isUnmatched ? "" : "cursor-pointer hover:bg-background"}`}
                   >
                     <td className="px-5 py-3 text-[13px] font-medium text-foreground">
                       <div className="flex items-center gap-1.5">
-                        {isExpanded ? (
+                        {isUnmatched ? (
+                          <span className="inline-block w-[15px]" />
+                        ) : isExpanded ? (
                           <ChevronDown size={15} className="text-muted-foreground" />
                         ) : (
                           <ChevronRightSmall size={15} className="text-muted-foreground" />
@@ -243,25 +249,36 @@ export function ComplianceMatrixTab({
                       </div>
                     </td>
                     <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">{group.vendor_name}</td>
-                    <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">
-                      <span className="font-semibold text-emerald-600">{group.matched}</span>
-                      {group.partial > 0 ? <span className="text-amber-600"> · {group.partial} partial</span> : null}
-                      <span className="text-muted-foreground"> / {group.total_specs} specs</span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex min-w-25 items-center gap-2">
-                        <div className="h-1.5 max-w-17.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${group.compliance_pct}%`,
-                              background: complianceColor(group.compliance_pct),
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs font-semibold text-slate-700">{group.compliance_pct}%</span>
-                      </div>
-                    </td>
+                    {isUnmatched ? (
+                      <td colSpan={2} className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-500">
+                        <StatusBadge status="no_equipment_match" />
+                        <span className="ml-2">Equipment Not Found</span>
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">
+                          <span className="font-semibold text-emerald-600">{group.matched}</span>
+                          {group.partial > 0 ? (
+                            <span className="text-amber-600"> · {group.partial} partial</span>
+                          ) : null}
+                          <span className="text-muted-foreground"> / {group.total_specs} specs</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex min-w-25 items-center gap-2">
+                            <div className="h-1.5 max-w-17.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${group.compliance_pct}%`,
+                                  background: complianceColor(group.compliance_pct),
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs font-semibold text-slate-700">{group.compliance_pct}%</span>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                   {isExpanded ? (
                     <tr className="border-t border-slate-100 bg-background">
