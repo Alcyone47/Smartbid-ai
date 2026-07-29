@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     structure_analysis_enabled: bool = True
     structure_analysis_max_chars: int = 24000
 
+    # Automatic plain-language RFP summary, generated once during the RFP
+    # extraction task run (reusing already-parsed page text -- raw page text is
+    # never otherwise persisted). Best-effort: truncates rather than batches,
+    # since this is a gist, not exhaustive extraction, and prose halves can't be
+    # recombined the way JSON list batches can.
+    summary_enabled: bool = True
+    summary_max_chars: int = 24000
+    summary_max_output_tokens: int = 1024
+
     # Rate-limit (HTTP 429) handling: exponential backoff with jitter, capped, honoring
     # the server's suggested retryDelay/Retry-After when larger. Used both for in-call
     # provider retries and the Celery task's automatic re-queue.

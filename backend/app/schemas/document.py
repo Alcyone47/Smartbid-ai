@@ -21,6 +21,7 @@ class DocumentRead(BaseModel):
     status: str
     extraction_progress: int
     error_message: str | None
+    summary: str | None
     uploaded_by: uuid.UUID
     created_at: datetime
 

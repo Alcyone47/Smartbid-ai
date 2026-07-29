@@ -100,9 +100,10 @@ async def test_extraction_uses_only_technical_pages_and_builds_hierarchy(monkeyp
     service = ExtractionService(llm_provider=fake, document_parser=_StubParser(_four_page_doc()))
     outcome = await service.extract_requirements(b"", PDF_MIME)
 
-    # Structure pass ran, then two extraction calls (one per technical page).
+    # Summary call ran first, then the structure pass, then two extraction calls
+    # (one per technical page).
     schema_calls = [c["schema_name"] for c in fake.calls]
-    assert schema_calls == ["analyze_structure", "extract_requirements", "extract_requirements"]
+    assert schema_calls == ["summarize", "analyze_structure", "extract_requirements", "extract_requirements"]
 
     # Only technical pages 2 and 3 were sent; admin/commercial pages were skipped.
     extraction_text = "\n".join(c["document_text"] for c in fake.calls if c["schema_name"] == "extract_requirements")

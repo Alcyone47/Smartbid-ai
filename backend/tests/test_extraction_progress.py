@@ -25,6 +25,9 @@ class _EmptyProvider(LLMProvider):
         key = "requirements" if "requirement" in schema_name else "specifications"
         return LLMExtractionResult(data={key: []}, raw_response={"schema": schema_name})
 
+    async def summarize(self, *, system_prompt, document_text):
+        return "stub summary"
+
 
 def _service(pages: list[str]) -> ExtractionService:
     return ExtractionService(
@@ -53,6 +56,7 @@ async def test_requirements_progress_reports_each_batch():
     assert calls == [(0, 3), (1, 3), (2, 3), (3, 3)]
     assert calls[-1][0] == calls[-1][1]  # reaches 100%
     assert outcome.page_count == 3
+    assert outcome.summary == "stub summary"  # summarization doesn't leak into batch progress
 
 
 @pytest.mark.asyncio

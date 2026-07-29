@@ -42,3 +42,19 @@ class ClaudeProvider(LLMProvider):
             raise LLMProviderError("Claude response did not include a tool_use block")
 
         return LLMExtractionResult(data=tool_use_block.input, raw_response=response.model_dump())
+
+    async def summarize(self, *, system_prompt: str, document_text: str) -> str:
+        try:
+            response = await self._client.messages.create(
+                model=self._model,
+                max_tokens=settings.summary_max_output_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": document_text}],
+            )
+        except Exception as exc:
+            raise LLMProviderError(f"Claude summarize call failed: {exc}") from exc
+
+        text_block = next((block for block in response.content if block.type == "text"), None)
+        if text_block is None:
+            raise LLMProviderError("Claude response did not include a text block")
+        return text_block.text

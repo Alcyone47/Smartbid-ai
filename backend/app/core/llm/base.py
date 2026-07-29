@@ -22,3 +22,7 @@ class LLMProvider(ABC):
         schema_name: str,
     ) -> LLMExtractionResult:
         """Run one extraction call over document_text, returning data conforming to json_schema plus the raw provider response."""
+
+    @abstractmethod
+    async def summarize(self, *, system_prompt: str, document_text: str) -> str:
+        """Run one plain-text completion call over document_text (no JSON/schema enforcement), returning the model's raw text output."""

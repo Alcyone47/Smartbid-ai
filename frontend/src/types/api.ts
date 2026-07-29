@@ -57,6 +57,7 @@ export interface Document {
   status: DocumentStatus
   extraction_progress: number
   error_message: string | null
+  summary: string | null
   uploaded_by: string
   created_at: string
 }

@@ -48,3 +48,7 @@ class DocumentRepository:
     async def update_structure_analysis(self, document: Document, structure_analysis: dict | None) -> None:
         document.structure_analysis = structure_analysis
         await self._db.commit()
+
+    async def update_summary(self, document: Document, summary: str | None) -> None:
+        document.summary = summary
+        await self._db.commit()

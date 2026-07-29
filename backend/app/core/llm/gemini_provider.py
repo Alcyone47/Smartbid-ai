@@ -137,6 +137,18 @@ class GeminiProvider(LLMProvider):
         )
         return await self._extract(instruction, document_text, allow_split=True)
 
+    async def summarize(self, *, system_prompt: str, document_text: str) -> str:
+        response = await self._generate_with_retry(
+            system_prompt,
+            document_text,
+            response_mime_type=None,
+            max_output_tokens=settings.summary_max_output_tokens,
+        )
+        text = response.text
+        if not text:
+            raise LLMProviderError("Gemini response did not include any text output")
+        return text
+
     async def _extract(
         self, instruction: str, document_text: str, *, allow_split: bool
     ) -> LLMExtractionResult:
@@ -172,11 +184,18 @@ class GeminiProvider(LLMProvider):
 
         return LLMExtractionResult(data=data, raw_response=response.model_dump(mode="json"))
 
-    async def _generate_with_retry(self, instruction: str, document_text: str):
+    async def _generate_with_retry(
+        self,
+        instruction: str,
+        document_text: str,
+        *,
+        response_mime_type: str | None = "application/json",
+        max_output_tokens: int | None = None,
+    ):
         config = types.GenerateContentConfig(
             system_instruction=instruction,
-            response_mime_type="application/json",
-            max_output_tokens=settings.extraction_max_output_tokens,
+            response_mime_type=response_mime_type,
+            max_output_tokens=max_output_tokens or settings.extraction_max_output_tokens,
         )
         for attempt in range(settings.extraction_max_retries + 1):
             try:

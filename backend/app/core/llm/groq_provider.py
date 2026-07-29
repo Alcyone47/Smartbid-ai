@@ -56,3 +56,21 @@ class GroqProvider(LLMProvider):
             raise LLMProviderError(f"Groq tool call arguments were not valid JSON: {exc}") from exc
 
         return LLMExtractionResult(data=data, raw_response=response.model_dump())
+
+    async def summarize(self, *, system_prompt: str, document_text: str) -> str:
+        try:
+            response = await self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": document_text},
+                ],
+                max_completion_tokens=settings.summary_max_output_tokens,
+            )
+        except Exception as exc:
+            raise LLMProviderError(f"Groq summarize call failed: {exc}") from exc
+
+        content = response.choices[0].message.content
+        if not content:
+            raise LLMProviderError("Groq response did not include content")
+        return content

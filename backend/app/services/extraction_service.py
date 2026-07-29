@@ -144,6 +144,22 @@ Produce one requirement item per distinct equipment/item, each with:
 
 Do not compare, score, or judge requirements. Only extract what is stated."""
 
+SUMMARY_SYSTEM_PROMPT = """You are writing a concise, plain-language summary of an RFP \
+(Request for Proposal) document for someone who has not read it, so they can quickly \
+understand what is being requested.
+
+Cover, briefly and only where the document actually states them:
+- What is being procured (scope / key deliverables)
+- Key timeline dates (submission deadline, project/delivery timeline) if stated
+- Eligibility or qualification requirements for bidders, if stated
+- How proposals will be evaluated, if stated
+
+Write 3-6 short paragraphs or a short paragraph followed by a few bullet points, in \
+plain prose - no JSON, no markdown headers, no restating this instruction. Do not \
+compare, score, rank, or judge anything; only describe what the document says. If a \
+category above is not addressed in the text, simply omit it rather than noting its \
+absence."""
+
 SPECIFICATION_SYSTEM_PROMPT = """You are extracting structured technical specifications from a vendor's proposal/datasheet document.
 A vendor document usually describes one or more distinct pieces of equipment/items (e.g. a network switch, a UPS, a server). Assign every specification to the equipment/item it belongs to.
 For every distinct specification, produce one item with:
@@ -250,6 +266,8 @@ class RequirementExtractionOutcome:
     # Audit trail of the structure pre-pass: classified sections + the exact
     # pages extraction consumed. None when the pass was skipped or failed.
     structure_analysis: dict | None = None
+    # Best-effort plain-language document gist. None when disabled or generation failed.
+    summary: str | None = None
 
 
 @dataclass
@@ -327,10 +345,34 @@ class ExtractionService:
         }
         return (selected or all_pages), structure_payload
 
+    async def _summarize(self, parsed: ParsedDocument) -> str | None:
+        """Best-effort whole-document gist. Runs over ALL pages (not the
+        technical-only subset _select_technical_pages produces), since
+        eligibility/timeline/evaluation content typically lives in the
+        front-matter that technical-page selection excludes. Truncates to
+        summary_max_chars rather than batching. Returns None (never raises,
+        except LLMRateLimitError) so a summarization hiccup never blocks the
+        requirements the user actually needs.
+        """
+        if not settings.summary_enabled:
+            return None
+        full_text = "\n\n".join(parsed.pages)[: settings.summary_max_chars]
+        try:
+            text = await self._llm_provider.summarize(
+                system_prompt=SUMMARY_SYSTEM_PROMPT, document_text=full_text
+            )
+            return text.strip()
+        except LLMRateLimitError:
+            raise
+        except Exception:  # noqa: BLE001 - best-effort, see docstring
+            logger.warning("RFP summary generation failed; leaving summary unset", exc_info=True)
+            return None
+
     async def extract_requirements(
         self, content: bytes, mime_type: str, progress_callback: ProgressCallback | None = None
     ) -> RequirementExtractionOutcome:
         parsed = self._parse_and_clean(content, mime_type)
+        summary = await self._summarize(parsed)
         technical_pages, structure_analysis = await self._select_technical_pages(parsed)
         batches = _batch_numbered_pages(
             technical_pages, settings.extraction_max_chars_per_batch, settings.extraction_pages_per_batch
@@ -363,6 +405,7 @@ class ExtractionService:
             raw_response={"batches": raw_responses},
             page_count=parsed.page_count,
             structure_analysis=structure_analysis,
+            summary=summary,
         )
 
     async def extract_specifications(

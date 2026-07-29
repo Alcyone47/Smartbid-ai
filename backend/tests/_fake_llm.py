@@ -27,3 +27,7 @@ class FakeLLMProvider(LLMProvider):
         queue = self._responses.get(schema_name, [{}])
         payload = queue.pop(0) if len(queue) > 1 else (queue[0] if queue else {})
         return LLMExtractionResult(data=payload, raw_response={"fake": True, "schema": schema_name})
+
+    async def summarize(self, *, system_prompt: str, document_text: str) -> str:
+        self.calls.append({"schema_name": "summarize", "document_text": document_text})
+        return "fake summary"

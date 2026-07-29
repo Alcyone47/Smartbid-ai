@@ -154,6 +154,29 @@ export function ProjectDetailsPage() {
             </div>
           </div>
 
+          {rfpDocument ? (
+            <div className="rounded-xl border border-border bg-card p-4.5">
+              <div className="mb-3.5 text-[13.5px] font-semibold text-foreground">RFP Summary</div>
+              {rfpDocument.summary ? (
+                <p className="text-[13px] leading-relaxed whitespace-pre-line text-slate-600">
+                  {rfpDocument.summary}
+                </p>
+              ) : rfpDocument.status === "completed" ? (
+                <p className="text-xs text-muted-foreground">
+                  Summary generation did not produce a result for this document.
+                </p>
+              ) : rfpDocument.status === "extracting" ||
+                rfpDocument.status === "retrying" ||
+                rfpDocument.status === "queued" ? (
+                <p className="text-xs text-muted-foreground">Generating summary…</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Extract the RFP to generate a plain-language summary.
+                </p>
+              )}
+            </div>
+          ) : null}
+
           <div className="rounded-xl border border-border bg-card p-4.5">
             <div className="mb-3.5 flex items-center justify-between">
               <span className="text-[13.5px] font-semibold text-foreground">Uploaded Vendor Datasheets</span>

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, text
+from sqlalchemy import ForeignKey, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,6 +30,9 @@ class Document(Base):
     # Audit trail of the structure pre-pass (classified sections + selected
     # pages) so "why was this page skipped?" is answerable from the DB.
     structure_analysis: Mapped[dict | None] = mapped_column(JSONB)
+    # Best-effort plain-language LLM summary of the whole document, generated once
+    # during extraction. Null if generation failed, was disabled, or hasn't run yet.
+    summary: Mapped[str | None] = mapped_column(Text)
     extraction_progress: Mapped[int] = mapped_column(nullable=False, server_default=text("0"))
     error_message: Mapped[str | None] = mapped_column(String)
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
