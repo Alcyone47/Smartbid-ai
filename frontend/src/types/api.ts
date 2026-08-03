@@ -161,6 +161,59 @@ export interface VendorComplianceSummary {
   optional_unmet: number
 }
 
+export interface VendorStackCandidate {
+  vendor_id: string
+  vendor_name: string
+  compliance_pct: number
+  match_status: EquipmentMatchStatus
+  equipment_match_confidence: number | null
+}
+
+export interface OptimizedEquipmentSelection {
+  equipment_key: string
+  equipment_label: string
+  best_vendor_id: string | null
+  best_vendor_name: string | null
+  compliance_pct: number
+  match_status: EquipmentMatchStatus
+  total_specs: number
+  matched: number
+  partial: number
+  unmatched: number
+  candidates: VendorStackCandidate[]
+}
+
+export interface VendorUsage {
+  vendor_id: string
+  vendor_name: string
+  equipment_count: number
+}
+
+export interface VendorStackOptimization {
+  equipment: OptimizedEquipmentSelection[]
+  overall_optimized_compliance_pct: number
+  vendor_usage: VendorUsage[]
+}
+
+export interface Notification {
+  id: string
+  project_id: string | null
+  type: string
+  title: string
+  message: string
+  is_read: boolean
+  created_at: string
+}
+
+export interface OrgMe {
+  org_id: string
+  org_name: string
+  org_created_at: string
+  member_count: number
+  role: string
+  member_since: string
+}
+
 export interface ApiErrorBody {
   success: false
   message: string

@@ -3,6 +3,8 @@ import { matchingApi } from "@/api/matching"
 
 export const complianceMatrixKey = (projectId: string) => ["projects", projectId, "compliance-matrix"] as const
 export const complianceSummaryKey = (projectId: string) => ["projects", projectId, "compliance-summary"] as const
+export const vendorStackOptimizationKey = (projectId: string) =>
+  ["projects", projectId, "vendor-stack-optimization"] as const
 
 export function useComplianceMatrix(projectId: string) {
   return useQuery({
@@ -20,6 +22,14 @@ export function useComplianceSummary(projectId: string) {
   })
 }
 
+export function useVendorStackOptimization(projectId: string) {
+  return useQuery({
+    queryKey: vendorStackOptimizationKey(projectId),
+    queryFn: () => matchingApi.vendorStackOptimization(projectId),
+    enabled: !!projectId,
+  })
+}
+
 export function useTriggerMatching(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -27,6 +37,7 @@ export function useTriggerMatching(projectId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: complianceMatrixKey(projectId) })
       queryClient.invalidateQueries({ queryKey: complianceSummaryKey(projectId) })
+      queryClient.invalidateQueries({ queryKey: vendorStackOptimizationKey(projectId) })
     },
   })
 }

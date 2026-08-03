@@ -16,11 +16,8 @@ from app.repositories.equipment_match_repository import EquipmentMatchRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.specification_repository import SpecificationRepository
 from app.repositories.vendor_repository import VendorRepository
-from app.schemas.compliance import (
-    EquipmentComplianceGroup,
-    EquipmentSpecComparison,
-    VendorComplianceSummaryRead,
-)
+from app.schemas.compliance import EquipmentComplianceGroup, VendorComplianceSummaryRead
+from app.schemas.optimization import VendorStackOptimizationRead
 from app.services.matching import (
     EQUIPMENT_MATCHED,
     ScoredEntry,
@@ -28,74 +25,11 @@ from app.services.matching import (
     match_equipment,
     match_equipment_parameters,
 )
+from app.services.matching.compliance_groups import build_equipment_groups as _build_equipment_groups
+from app.services.matching.optimization import optimize_vendor_stack
+from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["matching"])
-
-
-def _to_spec_comparison(row: Row) -> EquipmentSpecComparison:
-    entry, parameter, specification, _vendor_name = row
-    vendor_value = None
-    source_page = parameter.source_page
-    if specification is not None:
-        vendor_value = specification.value or specification.spec_text
-        source_page = specification.source_page
-    return EquipmentSpecComparison(
-        id=entry.id,
-        requirement_id=entry.parameter_id,
-        matched_specification_id=entry.matched_specification_id,
-        requirement_label=parameter.parameter_label,
-        requirement_text=parameter.parameter_text,
-        expected_value=parameter.expected_value,
-        unit=parameter.unit,
-        operator=parameter.operator,
-        is_mandatory=parameter.is_mandatory,
-        vendor_value=vendor_value,
-        source_page=source_page,
-        status=entry.status,
-        match_score=entry.match_score,
-        rationale=entry.rationale,
-    )
-
-
-def _build_equipment_groups(
-    equipment_rows: Sequence[Row], compliance_rows: Sequence[Row]
-) -> list[EquipmentComplianceGroup]:
-    """Fold Stage-1 EquipmentMatch rows (one per requirement/vendor, including
-    unmatched equipment with zero specs) together with Stage-2 compliance rows
-    (keyed by vendor + requirement) into one group per (vendor, equipment).
-    """
-    specs_by_group: dict[tuple[uuid.UUID, uuid.UUID], list[EquipmentSpecComparison]] = {}
-    for row in compliance_rows:
-        entry, parameter, _specification, _vendor_name = row
-        key = (entry.vendor_id, parameter.requirement_id)
-        specs_by_group.setdefault(key, []).append(_to_spec_comparison(row))
-
-    result: list[EquipmentComplianceGroup] = []
-    for equipment_match, requirement, vendor_name in equipment_rows:
-        specs = specs_by_group.get((equipment_match.vendor_id, requirement.id), [])
-        total = len(specs)
-        credit_sum = sum(float(s.match_score) if s.match_score is not None else 0.0 for s in specs)
-        matched = sum(1 for s in specs if s.status == "match")
-        partial = sum(1 for s in specs if s.status == "partial")
-        unmatched = sum(1 for s in specs if s.status not in ("match", "partial"))
-        compliance_pct = round(credit_sum / total * 100, 1) if total else 0.0
-        result.append(
-            EquipmentComplianceGroup(
-                equipment_key=requirement.equipment_key,
-                equipment_label=requirement.equipment_label,
-                vendor_name=vendor_name,
-                vendor_id=equipment_match.vendor_id,
-                match_status=equipment_match.match_status,
-                equipment_match_confidence=float(equipment_match.confidence_score),
-                compliance_pct=compliance_pct,
-                total_specs=total,
-                matched=matched,
-                partial=partial,
-                unmatched=unmatched,
-                specs=specs,
-            )
-        )
-    return result
 
 
 @router.post("/vendors/{vendor_id}/match", response_model=list[EquipmentComplianceGroup])
@@ -145,6 +79,12 @@ async def trigger_matching(
 
     # Stage 2: only for matched equipment, compare its parameters against ONLY its
     # matched vendor equipment's specs — never a fallback to unrelated equipment.
+    parameter_outcomes = [
+        outcome
+        for eo in equipment_outcomes
+        if eo.status == EQUIPMENT_MATCHED
+        for outcome in match_equipment_parameters(eo.requirement.parameters, eo.matched_specifications)
+    ]
     entries = [
         ComplianceMatrixEntry(
             org_id=current_user.org_id,
@@ -158,9 +98,7 @@ async def trigger_matching(
             match_score=outcome.match_score,
             rationale=outcome.rationale,
         )
-        for eo in equipment_outcomes
-        if eo.status == EQUIPMENT_MATCHED
-        for outcome in match_equipment_parameters(eo.requirement.parameters, eo.matched_specifications)
+        for outcome in parameter_outcomes
     ]
 
     compliance_repo = ComplianceRepository(db)
@@ -172,7 +110,24 @@ async def trigger_matching(
     compliance_rows: Sequence[Row] = await compliance_repo.list_by_project_with_details(
         project_id, vendor_id
     )
-    return _build_equipment_groups(equipment_rows, compliance_rows)
+    groups = _build_equipment_groups(equipment_rows, compliance_rows)
+
+    scored = [
+        ScoredEntry(
+            vendor_name=vendor.name,
+            status=outcome.status,
+            match_score=outcome.match_score,
+            is_mandatory=outcome.requirement.is_mandatory,
+        )
+        for outcome in parameter_outcomes
+    ]
+    summaries = compute_compliance_summary(scored)
+    compliance_pct = summaries[0].overall_compliance_pct if summaries else 0.0
+    await NotificationService(db).notify_matching_completed(
+        org_id=current_user.org_id, project_id=project_id, vendor_name=vendor.name, compliance_pct=compliance_pct
+    )
+
+    return groups
 
 
 @router.get("/compliance-matrix", response_model=list[EquipmentComplianceGroup])
@@ -212,3 +167,23 @@ async def compliance_summary(
     ]
     summaries = compute_compliance_summary(scored)
     return [VendorComplianceSummaryRead(**vars(summary)) for summary in summaries]
+
+
+@router.get("/vendor-stack-optimization", response_model=VendorStackOptimizationRead)
+async def vendor_stack_optimization(
+    project_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_org_user),
+    db: AsyncSession = Depends(get_db),
+) -> VendorStackOptimizationRead:
+    """For each equipment item, recommend whichever already-matched vendor scores
+    highest, and compute the overall compliance % of that optimized stack.
+    Deterministic aggregation over the existing per-vendor match rows — does not
+    change or re-run any per-vendor matching/compliance data."""
+    await _get_org_project(project_id, current_user.org_id, db)
+    equipment_match_repo = EquipmentMatchRepository(db)
+    compliance_repo = ComplianceRepository(db)
+    equipment_rows = await equipment_match_repo.list_by_project_with_details(project_id)
+    compliance_rows = await compliance_repo.list_by_project_with_details(project_id)
+    groups = _build_equipment_groups(equipment_rows, compliance_rows)
+    result = optimize_vendor_stack(groups)
+    return VendorStackOptimizationRead.model_validate(result, from_attributes=True)

@@ -12,6 +12,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.specification_repository import SpecificationRepository
 from app.services.extraction_service import ExtractionService
+from app.services.notification_service import NotificationService
 from app.services.storage import download_document
 
 
@@ -106,6 +107,13 @@ async def _process_document_async(document_id: str) -> None:
         await document_repo.update_page_count(document, outcome.page_count)
         await document_repo.update_status(document, status="completed", progress=100)
 
+        await NotificationService(db).notify_extraction_completed(
+            org_id=document.org_id,
+            project_id=document.project_id,
+            document_name=document.filename,
+            doc_type=document.doc_type,
+        )
+
 
 async def _run_task(document_id: str) -> None:
     # Each Celery task runs in its own event loop via asyncio.run(). The shared
@@ -126,6 +134,13 @@ async def _set_status(document_id: str, status: str, error_message: str | None =
             repo = DocumentRepository(db)
             document = await repo.get_by_id_unscoped(uuid.UUID(document_id))
             await repo.update_status(document, status=status, error_message=error_message)
+            if status == "failed":
+                await NotificationService(db).notify_extraction_failed(
+                    org_id=document.org_id,
+                    project_id=document.project_id,
+                    document_name=document.filename,
+                    error_message=error_message or "Unknown error",
+                )
     finally:
         await engine.dispose()
 

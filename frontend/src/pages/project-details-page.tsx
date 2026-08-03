@@ -10,6 +10,7 @@ import { DocumentRow } from "@/components/document-row"
 import { RequirementsTab } from "@/components/requirements-tab"
 import { VendorsTab } from "@/components/vendors-tab"
 import { ComplianceMatrixTab } from "@/components/compliance-matrix-tab"
+import { VendorStackOptimizationTab } from "@/components/vendor-stack-optimization-tab"
 import { ReportsPanel } from "@/components/reports-panel"
 import { EditProjectDialog } from "@/components/edit-project-dialog"
 import { DeleteProjectDialog } from "@/components/delete-project-dialog"
@@ -276,6 +277,7 @@ export function ProjectDetailsPage() {
           <TabsTrigger value="requirements">Requirements</TabsTrigger>
           <TabsTrigger value="vendors">Vendors</TabsTrigger>
           <TabsTrigger value="compliance">Compliance Matrix</TabsTrigger>
+          <TabsTrigger value="vendor-stack">Vendor Stack Optimization</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
         <TabsContent value="requirements" className="mt-5">
@@ -286,6 +288,9 @@ export function ProjectDetailsPage() {
         </TabsContent>
         <TabsContent value="compliance" className="mt-5">
           <ComplianceMatrixTab projectId={projectId} vendorDocuments={vendorDocuments} />
+        </TabsContent>
+        <TabsContent value="vendor-stack" className="mt-5">
+          <VendorStackOptimizationTab projectId={projectId} />
         </TabsContent>
         <TabsContent value="reports" className="mt-5">
           <ReportsPanel projectId={projectId} />

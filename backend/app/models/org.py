@@ -22,3 +22,4 @@ class OrgMember(Base):
     org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     role: Mapped[str] = mapped_column(String, nullable=False, server_default="member")
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))

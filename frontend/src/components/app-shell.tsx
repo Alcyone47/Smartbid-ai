@@ -1,7 +1,9 @@
 import type { ReactNode } from "react"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
-import { LayoutDashboard, Briefcase, Building2, FileBarChart, Settings, Search, Bell, ChevronDown } from "lucide-react"
+import { LayoutDashboard, Briefcase, Building2, FileBarChart, Settings, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
+import { ProfileMenu } from "@/components/profile-menu"
 import { cn } from "@/lib/utils"
 
 const NAV_ITEMS = [
@@ -88,17 +90,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           </div>
           <div className="flex items-center gap-4">
-            <div className="relative flex h-8.5 w-8.5 cursor-pointer items-center justify-center rounded-lg hover:bg-slate-100">
-              <Bell size={18} strokeWidth={2} className="text-slate-600" />
-              <div className="absolute top-1.5 right-2 h-1.75 w-1.75 rounded-full border-[1.5px] border-white bg-red-500" />
-            </div>
+            <NotificationsDropdown />
             <div className="h-5.5 w-px bg-border" />
-            <div className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-100">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-secondary text-[11.5px] font-bold text-primary">
-                {initialsFromEmail(session?.user.email)}
-              </div>
-              <ChevronDown size={13} strokeWidth={2.5} className="text-slate-500" />
-            </div>
+            <ProfileMenu />
           </div>
         </header>
 
